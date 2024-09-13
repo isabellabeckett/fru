@@ -1,0 +1,318 @@
+---
+title: "Counts"
+author: "Bhumpanya Chaisrisawatsuk"
+date: "2024-07-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(googlesheets4)
+library(malecns)
+library(dplyr)
+library(nat.nblast)
+library(fafbseg)
+library(tidyr)
+library(coconatfly)
+library(ggplot2)
+library(tidyr)
+library(extrafont)
+```
+
+
+```{r}
+mba <- mcns_body_annotations()
+merged_df_all_info <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/1RvzMYSPB01eG1X_sI6Xrp48s4XgwdXjTrNoGCtR39BI/edit?gid=753368775#gid=753368775", sheet = "Fru_FW")
+fru.url <- "https://docs.google.com/spreadsheets/d/1RvzMYSPB01eG1X_sI6Xrp48s4XgwdXjTrNoGCtR39BI/edit?gid=1045159116#gid=1045159116" 
+summary = read_sheet(fru.url, sheet = "Summary")
+summary = summary %>% filter(`Found?` == "Y")
+sheetnames <- summary$Clones
+sheetnames <- na.omit(sheetnames)
+```
+
+```{r}
+table(!is.na(summary$`Yu 2010 Hemilineage`) | !is.na(summary$`Ito Lee Lineage`))
+```
+
+```{r}
+hemilineage_male <- mcns_body_annotations(query=list(hemilineage="exists/1"))
+hemilineage_female <- infof %>% filter(!is.na(ito_lee_hemilineage))
+
+hemilineage_male_f <- hemilineage_male %>% select(bodyid, hemilineage) %>% mutate(sex = "M")
+hemilineage_female_f <- hemilineage_female %>% select(root_783, ito_lee_hemilineage) %>% 
+  rename(bodyid = root_783, hemilineage = ito_lee_hemilineage) %>% mutate(sex = "F")
+
+all_hemilineage <- rbind(hemilineage_female_f, hemilineage_male_f)
+count_df = all_hemilineage %>% group_by(hemilineage, sex)  %>%
+  summarize(count = n())
+```
+
+```{r}
+#summary <- summary %>% rename(hemilineage = 'Ito Lee Lineage')
+# Create a new column with the substring before the underscore
+all_hemilineage <- all_hemilineage %>%
+  mutate(hemilineage_prefix = sub("_.*", "", hemilineage))
+
+summary <- summary %>%
+  mutate(hemilineage_prefix = `Ito Lee Lineage`)
+
+# Perform the join based on the new column
+all_hemilineage <- all_hemilineage %>%
+  left_join(summary %>% select(hemilineage_prefix, Clones, 'Yu 2010 Hemilineage'), by = "hemilineage_prefix") %>% filter(hemilineage != "DM5_central" & hemilineage !="DM5_ventral")
+
+
+# Optionally remove the prefix column if it's no longer needed
+all_hemilineage <- all_hemilineage %>%
+  select(-hemilineage_prefix)
+```
+
+
+```{r}
+ggplot(count_df, aes(x = count, y = reorder(hemilineage, count), fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Count of Neurons by hemilineage",
+       x = "Count",
+       y = "Label") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 6),  # Adjust y-axis label font size
+        axis.title.y = element_text(size = 12, margin = margin(r = 20)),  # Adjust y-axis title font size and add margin
+        plot.title = element_text(size = 14, hjust = 0.5),  # Center align plot title
+        plot.margin = unit(c(1, 1, 2, 1), "lines")) +  # Add margin around the plot
+  geom_text(aes(label = count, x = count), hjust = -0.2, vjust = 0.5, size = 2, color = "black", fontface = "bold")
+```
+
+```{r}
+all_hemilineage_fru <- all_hemilineage %>% 
+  filter(hemilineage %in% merged_df_all_info$ito_lee_hemilineage) %>% 
+  filter(!duplicated(bodyid))
+
+all_hemilineage_fru <- merge(all_hemilineage_fru, merged_df_all_info, by.x = "hemilineage", by.y = "ito_lee_hemilineage", all.x =  TRUE) %>% filter(!duplicated(bodyid))
+```
+
+```{r}
+ggplot(count_df, aes(x = count, y = reorder(hemilineage, count), fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Count of Neurons by hemilineage",
+       x = "Count",
+       y = "Label") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 6),  # Adjust y-axis label font size
+        axis.title.y = element_text(size = 12, margin = margin(r = 20)),  # Adjust y-axis title font size and add margin
+        plot.title = element_text(size = 14, hjust = 0.5),  # Center align plot title
+        plot.margin = unit(c(1, 1, 2, 1), "lines")) +  # Add margin around the plot
+  geom_text(aes(label = count, x = count), hjust = -0.2, vjust = 0.5, size = 2, color = "black", fontface = "bold")
+```
+
+
+```{r}
+#Hemilineage plot
+count_df = all_hemilineage_fru %>% filter(hemilineage != "putative_primary" & hemilineage != "VPNd2" & hemilineage != "DILP__prim" & hemilineage != "primary") %>% group_by(hemilineage, sex)  %>%
+  summarize(count = n())  
+count_wide <- count_df %>%
+  pivot_wider(names_from = sex, values_from = count, values_fill = list(count = 0)) %>%
+  mutate(difference = F - M) 
+```
+
+```{r}
+#Clone plot
+count_df = all_hemilineage_fru %>% group_by(Clones, sex)  %>%
+  summarize(count = n()) 
+count_wide <- count_df %>%
+  pivot_wider(names_from = sex, values_from = count, values_fill = list(count = 0)) %>%
+  mutate(difference = F - M) %>% filter(!is.na(Clones))
+```
+
+```{r}
+ggplot(count_wide, aes(x = difference, y = reorder(hemilineage, difference), fill = difference)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Differences between FW and MCNS by hemilineage",
+       x = "Count",
+       y = "Label") +
+  theme_minimal() +
+  theme(axis.text = element_text(size = 12, family = "Avenir"),  # Adjust y-axis label font size
+        axis.title = element_text(size = 14, margin = margin(r = 20),family = "Avenir"),
+    legend.text = element_text(size = 18, family = "Avenir"),
+    legend.title = element_text(size = 20, family = "Avenir"),  # Adjust y-axis title font size and add margin
+        plot.title = element_text(size = 20, hjust = 0.5, family = "Avenir", face = "italic"),  # Center align plot title
+        plot.margin = unit(c(1, 1, 2, 1), "lines")) +  # Add margin around the plot
+  geom_text(aes(label = difference, x = difference), hjust = -0.2, vjust = 0.5, size = 2,  fontface = "bold", color = "black", show.legend = FALSE, family = "Avenir")+
+  scale_fill_gradient(name = "Difference")
+```
+
+```{r}
+fru_males <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/10XBTihDso3-_q_cZ0MlHIqtbh3F24qAIXODIibIrYgo/edit?gid=0#gid=0")
+fru_all <- all_hemilineage %>% filter(bodyid %in% fru_males$bodyid | bodyid %in% merged_df_all_info$root_id)
+```
+
+```{r}
+count_df = fru_all %>% 
+  filter(hemilineage != "putative_primary" & hemilineage != "VPNd2" & hemilineage != "DILP__prim" & hemilineage != "primary") %>% 
+  group_by(hemilineage, sex)  %>%
+  summarize(count = n())  
+count_wide <- count_df %>%
+  pivot_wider(names_from = sex, values_from = count, values_fill = list(count = 0)) %>%
+  mutate(difference = F - M) 
+```
+
+```{r}
+ggplot(count_df, aes(x = count, y = reorder(hemilineage, count), fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Count of Neurons by hemilineage",
+       x = "Count",
+       y = "Label") +
+  theme_minimal() +
+  theme(axis.text = element_text(size = 10, family = "Avenir"),  # Adjust y-axis label font size
+        axis.title = element_text(size = 16, margin = margin(r = 20), family = "Avenir"),  # Adjust y-axis title font size and add margin
+        plot.title = element_text(size = 20, hjust = 0.5, family = "Avenir", face = "italic"),  # Center align plot title
+        plot.margin = unit(c(1, 1, 2, 1), "lines")) +  # Add margin around the plot
+  geom_text(aes(label = count, x = count), hjust = -0.2, vjust = 0.5, size = 2, color = "black", fontface = "bold", family = "Avenir")
+```
+
+```{r}
+count_df = fru_all %>% group_by(Clones, sex)  %>%
+  summarize(count = n()) 
+count_wide <- count_df %>%
+  pivot_wider(names_from = sex, values_from = count, values_fill = list(count = 0)) %>%
+  mutate(difference = F - M) %>% filter(!is.na(Clones))
+```
+
+```{r}
+ggplot(count_wide, aes(x = difference, y = reorder(Clones, difference), fill = difference)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Differences between FW and MCNS by clones",
+       x = "Count",
+       y = "Label") +
+  theme_minimal() +
+  theme(axis.text = element_text(size = 12, family = "Avenir"),  # Adjust y-axis label font size
+        axis.title = element_text(size = 14, margin = margin(r = 20), family = "Avenir"),  # Adjust y-axis title font size and add margin
+            legend.text = element_text(size = 18, family = "Avenir"),
+    legend.title = element_text(size = 20, family = "Avenir"),
+        plot.title = element_text(size = 14, hjust = 0.5, family = "Avenir", face = "italic"),  # Center align plot title
+        plot.margin = unit(c(1, 1, 2, 1), "lines")) +  # Add margin around the plot
+  geom_text(aes(label = difference, x = difference), hjust = -0.2, vjust = 0.5, size = 2, color = "black", fontface = "bold", family = "Avenir")+
+  scale_fill_gradient(name = "Difference")
+```
+
+```{r}
+df_long <- gather(summary, key = "type", value = "value", Observed, Expected)
+ggplot(df_long, aes(x = Clones, y = value, fill = type)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(x = "Clone", y = "Value", title = "Observed vs Expected by Clone") +
+  theme_minimal()+
+  coord_flip()+
+   scale_fill_manual(values = c("Observed" = "cadetblue2", "Expected" = "royalblue1"), name = "Source") +  # Change colors
+  theme(
+    axis.text = element_text(size = 15, family = "Avenir"),  # Adjust axis text size
+    axis.title = element_text(size = 18, family = "Avenir"), # Adjust axis title size
+    plot.title = element_text(size = 20, face = "italic", family = "Avenir"), # Adjust plot title size
+    legend.text = element_text(size = 18, family = "Avenir"),
+    legend.title = element_text(size = 20, family = "Avenir")
+  )
+```
+
+```{r}
+observed_expected <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/1Hupw1ywfFf9xlPff4mpnH_ogocA-bAFQeojAcTl3LnY/edit?gid=0#gid=0")
+fru_females <- merged_df_all_info %>% filter(!is.na(Cachero)) %>% select(root_id, Cachero)
+count_df = fru_females %>% group_by(Cachero)  %>%
+  summarize(count = n())
+count_df <- count_df %>% rename(Clones = Cachero)
+OEFem <- observed_expected %>%
+  left_join(count_df %>% select(Clones, count), by = "Clones") %>% filter(!is.na(count))
+```
+
+```{r}
+df_long <- gather(OEFem, key = "type", value = "value", count, Expectedf)
+ggplot(df_long, aes(x = Clones, y = value, fill = type)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(x = "Clone", y = "Value", title = "Observed vs Expected by Clone") +
+  theme_minimal()+
+  coord_flip()+
+       scale_fill_manual(values = c("count" = "cadetblue2", "Expectedf" = "royalblue1"), name = "Source") +  # Change colors
+  theme(
+    axis.text = element_text(size = 15, family = "Avenir"),  # Adjust axis text size
+    axis.title = element_text(size = 18, family = "Avenir"), # Adjust axis title size
+    plot.title = element_text(size = 20, face = "italic", family = "Avenir"), # Adjust plot title size
+    legend.text = element_text(size = 18, family = "Avenir"),
+    legend.title = element_text(size = 20, family = "Avenir")
+  )
+```
+
+```{r}
+found <- sum(summary$`Found?` == "Y")
+entire_lineage <- sum(summary$`Entire lineage checked?` == "Y", na.rm = TRUE)
+  level <- c("Entire lineage checked?", "Found?") 
+  count <- c(entire_lineage, found) 
+  no_count <- c(58-entire_lineage, 58-found)
+completeness <- data.frame(level, count, no_count) 
+df_long <- completeness %>%
+  pivot_longer(cols = c(no_count, count), names_to = "type", values_to = "value") %>%
+  mutate(level = factor(level, levels = c("Found?", "Entire lineage checked?"))) %>%
+  mutate(type = factor(type, levels = c("no_count", "count")))
+ggplot(df_long, aes(x = level, y = value, fill = type)) +
+  geom_bar(stat = "identity") +
+  labs(x = "Level", y = "Count", title = "Completeness of matching") +
+  theme_minimal() +
+  scale_fill_manual(values = c("count" = "darkorange", "no_count" = "brown1"),
+                   labels = c("No", "Yes"), name = "Status") +
+  theme(
+    axis.text = element_text(size = 16, family = "Avenir"),
+    axis.title = element_text(size = 18, family = "Avenir"),
+    plot.title = element_text(size = 20, face = "italic", family = "Avenir"),
+    legend.text = element_text(size = 18, family = "Avenir"),
+    legend.title = element_text(size = 20, family = "Avenir")
+  )
+```
+
+```{r}
+group <- complete_hemilineages2 %>% filter(clone == "aDT-h")
+group_best <- group %>% arrange(desc(percent_dimorphic_output)) %>% filter(percent_dimorphic_output > 45) %>% select(bodyid)
+```
+
+```{r}
+library(fafbseg)
+flaa3 <- flywire_ids("/ito_lee_hemilineage:FLAa3", table = "info")
+flaa3_output <- flywire_partner_summary2(flaa3, partners = "o")
+```
+
+```{r}
+#difference plot
+PS.hemilineage <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/1btSxWVNQbGHO5pVb2xtnB6l9JY1t1qgQHzhfIJe_rXo/edit?gid=1474513720#gid=1474513720")
+fru_hemilineage <- PS.hemilineage %>% filter(seed_user == "IB" | seed_user == "IB (in progress)")
+
+all_hemilineage_fru <- all_hemilineage %>% 
+  filter(hemilineage %in% fru_hemilineage$ito_lee_hemilineage) %>% 
+  filter(!duplicated(bodyid))
+
+all_hemilineage_fru <- merge(all_hemilineage_fru, merged_df_all_info, by.x = "hemilineage", by.y = "ito_lee_hemilineage", all.x =  TRUE) %>% filter(!duplicated(bodyid))
+
+count_df = all_hemilineage_fru %>% filter(hemilineage != "putative_primary" & hemilineage != "VPNd2" & hemilineage != "DILP__prim" & hemilineage != "primary") %>% group_by(hemilineage, sex)  %>%
+  summarize(count = n())  
+count_wide <- count_df %>%
+  pivot_wider(names_from = sex, values_from = count, values_fill = list(count = 0)) %>%
+  mutate(difference = F - M) 
+
+ggplot(count_wide, aes(x = reorder(hemilineage, difference))) +
+  geom_bar(aes(y = F, fill = "F"), stat = "identity", position = "stack") +
+  geom_bar(aes(y = -M, fill = "M"), stat = "identity", position = "stack") +
+  geom_bar(aes(y = difference, fill = "Difference"), stat = "identity", position = "stack") +
+  geom_text(aes(y = F + 0.5, label = F), size = 3, fontface = "bold", color = "black", family = "Avenir") +
+  geom_text(aes(y = -M - 0.5, label = M), size = 3, fontface = "bold", color = "black", family = "Avenir") +
+  geom_text(aes(y = difference/2, label = difference), size = 3, fontface = "bold", color = "black", family = "Avenir") +
+  labs(title = "Counts of Neurons by Hemilineage in FW and MCNS",
+       x = "Hemilineage",
+       y = "Count",
+       fill = "Sex") +
+  theme_minimal() +
+  theme(axis.text = element_text(size = 12, family = "Avenir"),  # Adjust axis label font size
+        axis.title = element_text(size = 14, margin = margin(r = 20), family = "Avenir"),
+        legend.text = element_text(size = 18, family = "Avenir"),
+        legend.title = element_text(size = 20, family = "Avenir"),  # Adjust axis title font size and add margin
+        plot.title = element_text(size = 20, hjust = 0.5, family = "Avenir", face = "italic"),  # Center align plot title
+        plot.margin = unit(c(1, 1, 2, 1), "lines")) +  # Add margin around the plot
+  scale_fill_manual(values = c("F" = "salmon", "M" = "royalblue2", "Difference" = "grey78"))+
+  coord_flip()
+```
+

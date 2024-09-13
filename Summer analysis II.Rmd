@@ -1,0 +1,486 @@
+---
+title: "Summer analysis II"
+author: "Bhumpanya Chaisrisawatsuk"
+date: "2024-07-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(googlesheets4)
+library(malecns)
+library(dplyr)
+library(nat.nblast)
+library(fafbseg)
+library(tidyverse)
+library(coconatfly)
+library(dendextend)
+library(ggplot2)
+library(plotly)
+```
+
+```{r}
+fru.url <- "https://docs.google.com/spreadsheets/d/1RvzMYSPB01eG1X_sI6Xrp48s4XgwdXjTrNoGCtR39BI/edit?gid=1045159116#gid=1045159116" 
+summary = read_sheet(fru.url, sheet = "Summary")
+summary = summary %>% filter(`Found?` == "Y")
+sheetnames <- summary$Clones
+sheetnames <- na.omit(sheetnames)
+```
+
+```{r}
+for (i in seq_along(sheetnames)) {
+  clone <- sheetnames[i]
+  
+  # Use tryCatch to handle errors if a sheet doesn't exist
+  tryCatch({
+    fru.sheets <- googlesheets4::read_sheet(fru.url, sheet = clone)
+    
+    # Modify the data
+    fru.sheets <- fru.sheets %>% mutate(label = paste(bodyid, side, Fru, sep = "_"), clone = clone) %>% select(bodyid, Fru, hemilineage, side, clone) 
+    
+    var_name <- paste0("sheet_", clone)
+    
+    # Assign the modified data to a new variable in the global environment
+    assign(var_name, fru.sheets, envir = .GlobalEnv)
+
+  }, error = function(e) {
+    message(paste("Skipping sheet:", clone, "because it does not exist."))
+  })
+}
+```
+
+```{r}
+clone_names <- grep("^sheet_", ls(envir = .GlobalEnv), value = TRUE)
+clone_list <- mget(clone_names, envir = .GlobalEnv)
+
+# Combine all data frames into one
+combined_data <- do.call(rbind, clone_list)
+all.Y <- combined_data %>% filter(Fru=="Y") %>% select(bodyid)
+
+saveRDS(all.Y, "/Users/bhumpanya/Downloads/allY.RDS")
+saveRDS(combined_data, "/Users/bhumpanya/Downloads/combined.RDS")
+```
+
+```{r}
+all_hemilineages <- combined_data %>% filter(is.na(hemilineage)) %>% select(clone)
+clones_remove <- unique(all_hemilineages$clone)
+complete_hemilineages <- combined_data %>% filter(!clone %in% clones_remove)
+```
+
+```{r}
+clone_Y <- complete_hemilineages %>% filter(clone == "aDT-d", Fru == "Y") 
+clone_N <- complete_hemilineages %>% filter(clone == "aDT-d", Fru == "N")
+
+clone_Y_in <- mcns_connection_table(clone_Y$bodyid, partners = "i", threshold = 2)
+clone_N_in <- mcns_connection_table(clone_N$bodyid, partners = "i", threshold = 2)
+clone_Y_out <- mcns_connection_table(clone_Y$bodyid, partners = "o", threshold = 2)
+clone_N_out <- mcns_connection_table(clone_N$bodyid, partners = "o", threshold = 2)
+
+clone_Y_in_total <- sum(clone_Y_in$weight)
+clone_N_in_total <- sum(clone_N_in$weight)
+clone_Y_out_total <- sum(clone_Y_out$weight)
+clone_N_out_total <- sum(clone_N_out$weight)
+
+clone_Y_in$dimorphic_partner = NA
+clone_Y_in$dimorphic_partner = ifelse(clone_Y_in$partner %in% all.Y$bodyid, "Y", "N")
+clone_N_in$dimorphic_partner = NA
+clone_N_in$dimorphic_partner = ifelse(clone_N_in$partner %in% all.Y$bodyid, "Y", "N")
+clone_Y_out$dimorphic_partner = NA
+clone_Y_out$dimorphic_partner = ifelse(clone_Y_out$partner %in% all.Y$bodyid, "Y", "N")
+clone_N_out$dimorphic_partner = NA
+clone_N_out$dimorphic_partner = ifelse(clone_N_out$partner %in% all.Y$bodyid, "Y", "N")
+
+clone_Y_in_dimorphic_total <- clone_Y_in %>% group_by(dimorphic_partner) %>% summarise(weight = sum(weight)) %>% filter(dimorphic_partner=="Y")
+clone_N_in_dimorphic_total <- clone_N_in %>% group_by(dimorphic_partner) %>% summarise(weight = sum(weight)) %>% filter(dimorphic_partner=="Y")
+clone_Y_out_dimorphic_total <- clone_Y_out %>% group_by(dimorphic_partner) %>% summarise(weight = sum(weight)) %>% filter(dimorphic_partner=="Y")
+clone_N_out_dimorphic_total <- clone_N_out %>% group_by(dimorphic_partner) %>% summarise(weight = sum(weight)) %>% filter(dimorphic_partner=="Y")
+
+complete_hemilineages$percent_dimorphic_input <- NA
+complete_hemilineages$percent_dimorphic_output <- NA
+
+complete_hemilineages$percent_dimorphic_input <- ifelse(complete_hemilineages$clone=="aDT-d" & complete_hemilineages$Fru == "Y", clone_Y_in_dimorphic_total$weight/clone_Y_in_total, complete_hemilineages$percent_dimorphic_input)
+
+complete_hemilineages$percent_dimorphic_input <- ifelse(complete_hemilineages$clone=="aDT-d" & complete_hemilineages$Fru == "N", clone_N_in_dimorphic_total$weight/clone_N_in_total, complete_hemilineages$percent_dimorphic_input)
+
+complete_hemilineages$percent_dimorphic_output <- ifelse(complete_hemilineages$clone=="aDT-d" & complete_hemilineages$Fru == "Y", clone_Y_out_dimorphic_total$weight/clone_Y_out_total, complete_hemilineages$percent_dimorphic_output)
+
+complete_hemilineages$percent_dimorphic_output <- ifelse(complete_hemilineages$clone=="aDT-d" & complete_hemilineages$Fru == "N", clone_N_out_dimorphic_total$weight/clone_N_out_total, complete_hemilineages$percent_dimorphic_output)
+saveRDS(complete_hemilineages, "/Users/bhumpanya/Downloads/complete_hemi.RDS")
+```
+
+```{r}
+clones_with_both_fru <- complete_hemilineages %>%
+  group_by(clone) %>%
+  filter(any(Fru == "Y") & any(Fru == "N")) %>%
+  pull(clone) %>%
+  unique()
+
+complete_hemilineages <- complete_hemilineages %>%
+  filter(clone %in% clones_with_both_fru)
+```
+
+
+```{r}
+# Function to compute connection totals
+compute_totals <- function(df, direction, threshold = 2) {
+  connection_table <- mcns_connection_table(df$bodyid, partners = direction, threshold = threshold)
+  total_weight <- sum(connection_table$weight)
+  connection_table$dimorphic_partner <- ifelse(connection_table$partner %in% all.Y$bodyid, "Y", "N")
+  dimorphic_total <- connection_table %>%
+    group_by(dimorphic_partner) %>%
+    summarise(weight = sum(weight)) %>%
+    filter(dimorphic_partner == "Y")
+  return(list(total_weight = total_weight, dimorphic_total = dimorphic_total$weight))
+}
+
+# Initialize the columns
+complete_hemilineages$percent_dimorphic_input <- NA
+complete_hemilineages$percent_dimorphic_output <- NA
+
+# Get unique clones
+unique_clones <- unique(complete_hemilineages$clone)
+
+# Loop through each clone and compute the required metrics
+for (cl in unique_clones) {
+  
+  # Filter data for the current clone
+  clone_Y <- complete_hemilineages %>% filter(clone == cl, Fru == "Y")
+  clone_N <- complete_hemilineages %>% filter(clone == cl, Fru == "N")
+
+  # Compute totals for each combination of clone and Fru
+  clone_Y_in <- compute_totals(clone_Y, "i")
+  clone_N_in <- compute_totals(clone_N, "i")
+  clone_Y_out <- compute_totals(clone_Y, "o")
+  clone_N_out <- compute_totals(clone_N, "o")
+  
+  # Update the complete_hemilineages data frame with the computed percentages
+  complete_hemilineages <- complete_hemilineages %>%
+    mutate(
+      percent_dimorphic_input = ifelse(clone == cl & Fru == "Y", 100*clone_Y_in$dimorphic_total / clone_Y_in$total_weight, percent_dimorphic_input),
+      percent_dimorphic_input = ifelse(clone == cl & Fru == "N", 100*clone_N_in$dimorphic_total / clone_N_in$total_weight, percent_dimorphic_input),
+      percent_dimorphic_output = ifelse(clone == cl & Fru == "Y", 100*clone_Y_out$dimorphic_total / clone_Y_out$total_weight, percent_dimorphic_output),
+      percent_dimorphic_output = ifelse(clone == cl & Fru == "N", 100*clone_N_out$dimorphic_total / clone_N_out$total_weight, percent_dimorphic_output)
+    )
+}
+```
+
+```{r}
+complete_clones <- complete_hemilineages2 %>% 
+  group_by(clone, Fru) %>%
+  mutate(average_dimorphic_input = mean(percent_dimorphic_input)) %>%
+  mutate(average_dimorphic_output = mean(percent_dimorphic_output)) %>%
+  select(clone, Fru, average_dimorphic_output, average_dimorphic_input) %>%
+  unique()
+```
+
+```{r}
+ggplot(complete_clones, aes(x = average_dimorphic_input, y = average_dimorphic_output, color = clone)) +
+  geom_point(aes(shape = Fru), size = 5) + # Use shape to distinguish Fru
+  geom_line(aes(group = clone), size = 1, alpha = 0.5) +
+  xlim(0,40) +
+  ylim(0,40) +
+  scale_shape_manual(values = c(17, 19, 21)) + # Open dot for Fru=="Y" (21) and closed dot for Fru=="N" (19)
+  labs(x = "Percent Dimorphic Input", y = "Percent Dimorphic Output", title = "Male Fru+ Input vs Output") +
+  theme_minimal() +
+  theme(legend.position = "right",
+    axis.text = element_text(size = 15, family = "Avenir"),  # Adjust axis text size
+    axis.title = element_text(size = 18, family = "Avenir"), # Adjust axis title size
+    plot.title = element_text(size = 20, face = "italic", family = "Avenir"), # Adjust plot title size
+    legend.text = element_text(size = 18, family = "Avenir"),
+    legend.title = element_text(size = 20, family = "Avenir")
+  )
+```
+
+```{r}
+compute_totals_indv <- function(df, direction, threshold = 2) {
+  connection_table <- mcns_connection_table(df$bodyid, partners = direction, threshold = threshold)
+  connection_table <- connection_table %>%
+  group_by(bodyid) %>%
+  mutate(total_weight = sum(weight)) %>%
+  ungroup()
+  connection_table$dimorphic_partner <- ifelse(connection_table$partner %in% all.Y$bodyid, "Y", "N")
+  dimorphic_summary <- connection_table %>%
+  group_by(bodyid, dimorphic_partner) %>%
+  summarise(weight = sum(weight), .groups = 'drop') %>% 
+    filter(dimorphic_partner == "Y")
+
+# Step 2: Extract total_weight where dimorphic_partner is "Y"
+dimorphic_total <- connection_table %>%
+  #filter(dimorphic_partner == "Y") %>%
+  select(bodyid, dimorphic_partner, total_weight) %>%
+  distinct() # Ensure unique rows if there are duplicates
+
+# Step 3: Join the summarized weight data with the total_weight
+dm2 <- dimorphic_summary %>%
+  left_join(dimorphic_total, by = c("bodyid", "dimorphic_partner"))
+
+  
+  return(dm2)
+}
+
+complete_hemilineages$percent_dimorphic_input <- NA
+complete_hemilineages$percent_dimorphic_output <- NA
+
+  # Filter data for the current clone
+  clone_Y <- complete_hemilineages %>% filter(Fru == "Y")
+  clone_N <- complete_hemilineages %>% filter(Fru == "N")
+  
+  # Compute totals for each combination of clone and Fru
+  clone_Y_in <- compute_totals_indv(clone_Y, "i")
+  clone_N_in <- compute_totals_indv(clone_N, "i")
+  clone_Y_out <- compute_totals_indv(clone_Y, "o")
+  clone_N_out <- compute_totals_indv(clone_N, "o")
+```
+   
+```{r}   
+complete_hemilineages2 <- complete_hemilineages %>%
+  filter(!is.na(Fru)) %>%
+  distinct(bodyid, .keep_all = T)
+s <- unlist(complete_hemilineages2[["bodyid"]]) 
+for(i in s) {
+  # Filter the neuron row
+  neuron <- complete_hemilineages2 %>% filter(bodyid == i)
+  index <- which(complete_hemilineages2$bodyid == i)
+  # Check the condition
+  if (neuron$Fru == "Y") {
+     if (i %in% clone_Y_in[["bodyid"]]){
+    # Find the index of the current neuron in the data frame
+    corresponding <- clone_Y_in %>% filter(bodyid == i)
+    # Update the specific column
+    complete_hemilineages2[index, 6] <- 100*corresponding$weight / corresponding$total_weight
+     } else {
+      complete_hemilineages2[index, 6] = 0
+    }
+  } else if (neuron$Fru == "N") {
+    if(i %in% clone_N_in[["bodyid"]]){
+    corresponding <- clone_N_in %>% filter(bodyid == i)
+    complete_hemilineages2[index, 6] <- 100*corresponding$weight / corresponding$total_weight
+    } else {
+      complete_hemilineages2[index, 6] = 0
+    }
+  } else {
+      complete_hemilineages2[index, 6] = 0
+  }
+}
+
+for(i in s) {
+  # Filter the neuron row
+  neuron <- complete_hemilineages2 %>% filter(bodyid == i)
+  index <- which(complete_hemilineages2$bodyid == i)
+  # Check the condition
+  if (neuron$Fru == "Y") {
+     if (i %in% clone_Y_out[["bodyid"]]){
+    # Find the index of the current neuron in the data frame
+    corresponding <- clone_Y_out %>% filter(bodyid == i)
+    # Update the specific column
+    complete_hemilineages2[index, 7] <- 100*corresponding$weight / corresponding$total_weight
+     } else {
+      complete_hemilineages2[index, 7] = 0
+    }
+  } else if (neuron$Fru == "N") {
+    if(i %in% clone_N_out[["bodyid"]]){
+    corresponding <- clone_N_out %>% filter(bodyid == i)
+    complete_hemilineages2[index, 7] <- 100*corresponding$weight / corresponding$total_weight
+    } else {
+      complete_hemilineages2[index, 7] = 0
+    }
+  } else {
+      complete_hemilineages2[index, 7] = 0
+  }
+}
+
+```
+
+```{r}
+# Calculate mean percent_dimorphic_input for each clone and Fru
+mean_values_i <- complete_hemilineages2 %>%
+  group_by(clone, Fru) %>%
+  summarise(mean_percent_dimorphic_input = mean(percent_dimorphic_input, na.rm = TRUE))
+
+mean_values_i <- complete_hemilineages2 %>%
+  left_join(mean_values_i, by = c("clone", "Fru"))
+```
+
+```{r}
+complete_hemilineages2 <- complete_hemilineages2 %>%
+  arrange(Fru)
+gg <- ggplot(data = complete_hemilineages2, aes(x = clone, y = percent_dimorphic_input, color = Fru, shape = Fru, 
+                                                text = paste("bodyid:", bodyid))) +  # Adding bodyid info as tooltip
+  geom_jitter(width = 0.2, size = 3, stroke = 1, fill = NA) +  # Plot the bodyid values with unfilled dots
+  geom_point(data = mean_values_i, aes(x = clone, y = mean_percent_dimorphic_input, shape = Fru), 
+             size = 5, color = "black", fill = NA, stroke = 1.5, show.legend = FALSE) +
+  scale_shape_manual(values = c("Y" = 1, "N" = 0)) +  # Dot (16) for Fru == "Y", Square (15) for Fru == "N"
+  scale_color_manual(values = c("Y" = "orange2", "N" = "darkorchid2"))+
+  labs(
+    x = "Clone",
+    y = "Percent Dimorphic Input",
+    title = "Percent Dimorphic Input by Clone and Fru",
+    color = "Clone",
+    shape = "Fru"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1), 
+        axis.text = element_text(size = 15, family = "Avenir"),  # Adjust axis text size
+        axis.title.x = element_text(size = 18, family = "Avenir", margin = margin(t=20)), # Adjust axis title size
+        axis.title.y = element_text(size = 18, family = "Avenir"),
+        plot.title = element_text(size = 20, face = "italic", family = "Avenir"), # Adjust plot title size
+        legend.text = element_text(size = 18, family = "Avenir"),
+        legend.title = element_text(size = 20, family = "Avenir")
+        )
+
+gg
+```
+
+```{r}
+ggplotly(gg, tooltip = "text")
+```
+
+```{r}
+mean_values_o <- complete_hemilineages2 %>%
+  group_by(clone, Fru) %>%
+  summarise(mean_percent_dimorphic_output = mean(percent_dimorphic_output, na.rm = TRUE))
+
+mean_values_o <- complete_hemilineages2 %>%
+  left_join(mean_values_o, by = c("clone", "Fru"))
+```
+
+```{r}
+complete_hemilineages2 <- complete_hemilineages2 %>%
+  arrange(Fru)
+ggplot(data = complete_hemilineages2, aes(x = clone, y = percent_dimorphic_output, color = Fru, shape = Fru)) +
+  geom_jitter(width = 0.2, size = 3, stroke = 1.2, fill = NA) +  # Plot the bodyid values with color and shape
+  geom_point(data = mean_values_o, aes(x = clone, y = mean_percent_dimorphic_output, shape = Fru), size = 5, color = "black",stroke = 1.5, show.legend = FALSE) +  # Plot the mean values
+  scale_shape_manual(values = c("Y" = 1, "N" = 0)) + 
+   scale_color_manual(values = c("Y" = "orange2", "N" = "darkorchid2"))+# Dot (16) for Fru == "Y", Square (15) for Fru == "N"
+  labs(
+    x = "Clone",
+    y = "Percent Dimorphic Output",
+    title = "Percent Dimorphic Output by Clone and Fru",
+    color = "Clone",
+    shape = "Fru"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1),
+            axis.text = element_text(size = 15, family = "Avenir"),  # Adjust axis text size
+    axis.title.x = element_text(size = 18, family = "Avenir", margin = margin(t=20)), # Adjust axis title size
+    axis.title.y = element_text(size = 18, family = "Avenir"),
+    plot.title = element_text(size = 20, face = "italic", family = "Avenir"), # Adjust plot title size
+    legend.text = element_text(size = 18, family = "Avenir"),
+    legend.title = element_text(size = 20, family = "Avenir")
+    )
+```
+
+```{r}
+#mba <- mcns_body_annotations()
+all.hemilineages <- mba %>% filter(!is.na(hemilineage) & hemilineage != "no_lineage" & hemilineage != "TBD")
+countdf <- all.hemilineages %>% count(hemilineage) %>% filter(hemilineage != "putative_primary" & hemilineage != "primary" & !str_detect(hemilineage, "^MB")) %>% mutate(hemilineage = fct_reorder(hemilineage, n, .desc = TRUE))
+ggplot(countdf, aes(x = n, y = hemilineage), fill = hemilineage) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(x = "Count", y = "Hemilineage", title = "Bar Chart in Descending Order by n") +
+  scale_fill_discrete(name = "hemilineage")
+```
+
+```{r}
+out58449 <- mcns_connection_table(21162, partners = "o", summary = TRUE)
+colnames(out58449)[1] <- "bodyid"
+partner58449 <- merge(out58449, combined_data[, c("bodyid", "clone", "hemilineage/AOTU00")], 
+                      by = "bodyid", 
+                      all.x = TRUE)
+```
+
+```{r}
+complete_hemilineages2$clone_fru <- interaction(complete_hemilineages2$clone, complete_hemilineages2$Fru, sep = " ")
+mean_values_i$clone_fru <- interaction(mean_values_i$clone, mean_values_i$Fru, sep = " ")
+```
+
+
+```{r}
+ggplot(data = complete_hemilineages2, aes(x = clone, y = percent_dimorphic_input, color = Fru, shape = Fru)) +
+  geom_jitter(width = 0.2, size = 3, stroke = 1.2, fill = NA) +  # Plot the individual values with unfilled dots
+ # Plot the mean values as points on the lines
+    geom_errorbar(data = mean_values_i, aes(x = clone, ymin = mean_percent_dimorphic_input, ymax = mean_percent_dimorphic_input, linetype = Fru), color = "black", width = 1, size = 1, show.legend = FALSE) +
+  scale_shape_manual(values = c("Y" = 1, "N" = 0)) +  # Circle (1) for Fru == "Y", No shape (0) for Fru == "N"
+  scale_linetype_manual(values = c("Y" = "dashed", "N" = "solid"))
+  labs(
+    x = "Clone",
+    y = "Percent Dimorphic Input",
+    title = "Percent Dimorphic Input by Clone and Fru",
+    color = "Fru",
+    shape = "Fru"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 1)) +
+  facet_wrap(~Fru, scales = "free_x")
+```
+
+```{r}
+complete_hemilineages2 %>% complete_hemilineages2[bodyid != "",]
+```
+
+
+```{r}
+ggplot(data = complete_hemilineages2, aes(x = percent_dimorphic_input, y = percent_dimorphic_output, colour = clone, shape = Fru)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = T, aes(group = Fru, linetype = Fru)) +
+    labs(
+    x = "Percent dimorphic input",
+    y = "Percent dimorphic output",
+    title = "Percent Dimorphic Input and Percent Dimorphic Output by Clone and Fru",
+    color = "Clone",
+    shape = "Fru"
+  ) +
+  xlim(0, 80) +
+  ylim(0, 80) +
+  theme_minimal() +
+    scale_shape_manual(values = c("Y" = 16, "N" = 15)) + 
+    theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1), 
+    axis.text = element_text(size = 15, family = "Avenir"), 
+    axis.title.x = element_text(size = 18, family = "Avenir", margin = margin(t=20)), 
+     axis.title.y = element_text(size = 18, family = "Avenir"),
+    plot.title = element_text(size = 20, face = "italic", family = "Avenir"), 
+    legend.text = element_text(size = 18, family = "Avenir"),
+    legend.title = element_text(size = 20, family = "Avenir")
+    )
+```
+
+```{r}
+# Subset the data for Fru = Y and Fru = N
+data_fru_Y <- subset(complete_hemilineages2, Fru == "Y")
+data_fru_N <- subset(complete_hemilineages2, Fru == "N")
+
+# Fit linear models for each Fru group
+model_fru_Y <- lm(percent_dimorphic_output ~ percent_dimorphic_input, data = data_fru_Y)
+model_fru_N <- lm(percent_dimorphic_output ~ percent_dimorphic_input, data = data_fru_N)
+
+# Get the R-squared values from each model
+r_squared_fru_Y <- summary(model_fru_Y)$r.squared
+r_squared_fru_N <- summary(model_fru_N)$r.squared
+
+# Print the R-squared values
+cat("R-squared for Fru = Y: ", r_squared_fru_Y, "\n")
+cat("R-squared for Fru = N: ", r_squared_fru_N, "\n")
+
+```
+
+```{r}
+# Subset the data for Fru = Y and Fru = N
+data_fru_Y <- subset(FW_complete_hemilineages2, Fru == "Y")
+data_fru_N <- subset(FW_complete_hemilineages2, Fru == "N")
+
+# Fit linear models for each Fru group
+model_fru_Y <- lm(percent_dimorphic_output ~ percent_dimorphic_input, data = data_fru_Y)
+model_fru_N <- lm(percent_dimorphic_output ~ percent_dimorphic_input, data = data_fru_N)
+
+# Get the R-squared values from each model
+r_squared_fru_Y <- summary(model_fru_Y)$r.squared
+r_squared_fru_N <- summary(model_fru_N)$r.squared
+
+# Print the R-squared values
+cat("R-squared for Fru = Y: ", r_squared_fru_Y, "\n")
+cat("R-squared for Fru = N: ", r_squared_fru_N, "\n")
+```
+

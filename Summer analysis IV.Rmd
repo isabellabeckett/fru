@@ -1,0 +1,606 @@
+---
+title: "Summer analysis IV"
+author: "Bhumpanya Chaisrisawatsuk"
+date: "2024-08-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(googlesheets4)
+library(malecns)
+library(dplyr)
+library(nat.nblast)
+library(fafbseg)
+library(tidyverse)
+library(coconatfly)
+library(dendextend)
+library(ggplot2)
+library(arrow)
+```
+
+```{r}
+choose_segmentation('public')
+```
+
+```{r}
+fru.url <- "https://docs.google.com/spreadsheets/d/1RvzMYSPB01eG1X_sI6Xrp48s4XgwdXjTrNoGCtR39BI/edit?gid=1045159116#gid=1045159116" 
+summary = read_sheet(fru.url, sheet = "Summary")
+summary = summary %>% filter(`Found in FW?` == "Y")
+sheetnames <- summary$Clones
+sheetnames <- na.omit(sheetnames)
+```
+
+```{r}
+sheetnames.FW <- NULL
+for(i in seq_along(sheetnames))
+{
+  clone <- sheetnames[i]
+  current_sheet <- paste0("FW_",clone)
+  sheetnames.FW <- c(sheetnames.FW, current_sheet)
+}  
+```
+
+```{r}
+for (i in seq_along(sheetnames.FW)) {
+  clone.FW <- sheetnames.FW[i]
+  tryCatch({
+    fru.sheets.FW <- googlesheets4::read_sheet(fru.url, sheet = clone.FW)
+    fru.sheets.FW <- fru.sheets.FW %>% mutate(label = paste(root_id, side, Fru, sep = "_"), clone = clone.FW) %>% select(root_id, Fru, hemilineage, side, clone) 
+    var_name <- paste0("FWsheet_", clone.FW)
+    assign(var_name, fru.sheets.FW, envir = .GlobalEnv)
+  }, error = function(e) {
+    message(paste("Skipping sheet:", clone.FW, "because it does not exist."))
+  })
+}
+```
+
+```{r}
+FW_clone_names <- grep("^FWsheet_", ls(envir = .GlobalEnv), value = TRUE)
+FW_clone_list <- mget(FW_clone_names, envir = .GlobalEnv)
+
+# Combine all data frames into one
+FW_combined_data <- do.call(rbind, FW_clone_list)
+FW.Y <- FW_combined_data %>% filter(Fru=="Y") %>% select(root_id)
+```
+
+```{r}
+FW_all_hemilineages <- FW_combined_data %>% filter(is.na(hemilineage)) %>% select(clone)
+FW_clones_remove <- unique(FW_all_hemilineages$clone)
+FW_complete_hemilineages <- FW_combined_data %>% filter(!clone %in% FW_clones_remove)
+```
+
+```{r}
+FW_clones_with_both_fru <- FW_complete_hemilineages %>%
+  group_by(clone) %>%
+  filter(any(Fru == "Y") & any(Fru == "N")) %>%
+  pull(clone) %>%
+  unique()
+
+FW_complete_YandN <- FW_complete_hemilineages %>%
+  filter(clone %in% FW_clones_with_both_fru)
+```
+
+
+```{r}
+compute_totals_indv_pre <- function(df, direction, threshold = 2) {
+  choose_segmentation('public')
+  connection_table <- flywire_partner_summary(df, partners = "i", threshold = threshold)
+  connection_table$query <- df
+  connection_table <- connection_table %>%
+  group_by(query) %>%
+  mutate(total_weight = sum(weight)) %>%
+  ungroup()
+  connection_table$dimorphic_partner <- ifelse(connection_table$pre_id %in% FW.Y$root_id, "Y", "N")
+  FW_dimorphic_summary <- connection_table %>%
+  group_by(query, dimorphic_partner) %>%
+  summarise(weight = sum(weight), .groups = 'drop') %>% 
+    filter(dimorphic_partner == "Y")
+
+# Step 2: Extract total_weight where dimorphic_partner is "Y"
+dimorphic_total <- connection_table %>%
+  filter(dimorphic_partner == "Y") %>%
+  select(query, dimorphic_partner, total_weight) %>%
+  distinct() # Ensure unique rows if there are duplicates
+
+# Step 3: Join the summarized weight data with the total_weight
+FWdm2 <- FW_dimorphic_summary %>%
+  left_join(dimorphic_total, by = c("query", "dimorphic_partner"))
+
+  
+  return(FWdm2)
+}
+
+compute_totals_indv_post <- function(df, direction, threshold = 2) {
+  choose_segmentation('public')
+  connection_table <- flywire_partner_summary(df, partners = "o", threshold = threshold)
+  connection_table$query <- df
+  connection_table <- connection_table %>%
+  group_by(query) %>%
+  mutate(total_weight = sum(weight)) %>%
+  ungroup()
+  connection_table$dimorphic_partner <- ifelse(connection_table$post_id %in% FW.Y$root_id, "Y", "N")
+  FW_dimorphic_summary <- connection_table %>%
+  group_by(query, dimorphic_partner) %>%
+  summarise(weight = sum(weight), .groups = 'drop') %>% 
+    filter(dimorphic_partner == "Y")
+
+dimorphic_total <- connection_table %>%
+  filter(dimorphic_partner == "Y") %>%
+  select(query, dimorphic_partner, total_weight) %>%
+  distinct() 
+
+# Step 3: Join the summarized weight data with the total_weight
+FWdm2 <- FW_dimorphic_summary %>%
+  left_join(dimorphic_total, by = c("query", "dimorphic_partner"))
+
+  
+  return(FWdm2)
+}
+```
+
+```{r}
+s <- length(FW_complete_YandN$root_id)
+FW_neurons <- unlist(FW_complete_YandN$root_id)
+for(i in 1:s)
+{
+  message(paste("Processing neuron", i))
+  FW_partners <- tryCatch({
+    suppressWarnings({
+      suppressMessages({
+    choose_segmentation('public')
+    flywire_partner_summary(FW_neurons[i], partners = "inputs", threshold = 2)
+    })
+  })
+  }, error = function(e) {
+    message(paste("Error for neuron", i, "- Skipping neuron"))
+    return(NULL)  
+  })
+  
+  if (!is.null(FW_partners)) {
+    saveRDS(FW_partners, paste0("~/Downloads/FW_partners2/",FW_neurons[i], ".RDS"))
+  }
+}
+```
+
+```{r}
+#s <- length(to_do)
+FW_neurons <- unlist(`FWsheet_FW_aSP-i`$root_id)
+for(i in FW_neurons)
+{
+  message(paste("Processing neuron", i))
+  FW_partners <- tryCatch({
+    suppressWarnings({
+      suppressMessages({
+    choose_segmentation('public')
+    flywire_partner_summary(i, partners = "outputs", threshold = 2)
+      })
+    })
+  }, error = function(e) {
+    message(paste("Error for neuron", i, "- Skipping neuron"))
+    return(NULL)  
+  })
+  
+  if (!is.null(FW_partners)) {
+    saveRDS(FW_partners, paste0("~/Downloads/FW_partners/",i, ".RDS"))
+  }
+}
+```
+
+```{r}
+  # Filter data for the current clone
+  FW_clone_Y_table <- FW_complete_hemilineages %>% filter(Fru == "Y") 
+  FW_clone_N_table <- FW_complete_hemilineages %>% filter(Fru == "N") 
+  FW_clone_Y_root_id <- FW_clone_Y_table$root_id
+  FW_clone_N_root_id <- FW_clone_N_table$root_id
+  FW_clone_Y <- as.character(FW_clone_Y_root_id)
+  FW_clone_N <- as.character(FW_clone_N_root_id)
+
+
+## Input to Fru neurons
+s <- length(FW_clone_Y)
+FW_clone_Y_in <- NULL
+for(i in 1:s)
+{
+  if (i %% 10 == 0) {
+    message(paste("Processing neuron", i))
+  }
+  
+  FW_clone_Y_temp <- tryCatch({
+    suppressWarnings({
+      suppressMessages({
+    compute_totals_indv_pre(FW_clone_Y[i])
+    })
+  })
+  }, error = function(e) {
+    message(paste("Error for neuron", i, "- Skipping neuron"))
+    return(NULL)  # Return NULL if there's an error
+  })
+  
+  # Only bind the result if it's not NULL
+  if (!is.null(FW_clone_Y_temp)) {
+    FW_clone_Y_in <- rbind(FW_clone_Y_in, FW_clone_Y_temp)
+  }
+}  
+
+## Input to non-Fru neurons
+s <- length(FW_clone_N)
+FW_clone_N_in <- NULL
+for(i in 1:s)
+{
+  if (i %% 10 == 0) {
+    message(paste("Processing neuron", i))
+  }
+  
+  FW_clone_N_temp <- tryCatch({
+    suppressWarnings({
+      suppressMessages({
+    compute_totals_indv_pre(FW_clone_N[i])
+    })
+  })
+  }, error = function(e) {
+    message(paste("Error for neuron", i, "- Skipping neuron"))
+    return(NULL)
+  })
+  if (!is.null(FW_clone_N_temp)) {
+    FW_clone_N_in <- rbind(FW_clone_N_in, FW_clone_N_temp)
+  }
+}  
+
+## Output to Fru neurons
+s <- length(FW_clone_Y)
+FW_clone_Y_out <- NULL
+for(i in 1:s)
+{
+  if (i %% 10 == 0) {
+    message(paste("Processing neuron", i))
+  }
+  
+  FW_clone_Y_temp <- tryCatch({
+    suppressMessages({
+      suppressWarnings({
+    compute_totals_indv_post(FW_clone_Y[i])
+    })
+  })
+  }, error = function(e) {
+    message(paste("Error for neuron", i, "- Skipping neuron"))
+    return(NULL)
+  })
+  if (!is.null(FW_clone_Y_temp)) {
+    FW_clone_Y_out <- rbind(FW_clone_Y_out, FW_clone_Y_temp)
+  }
+}  
+
+##Output to non-Fru neurons
+s <- length(FW_clone_N)
+FW_clone_N_out <- NULL
+for(i in 1:s)
+{
+  if (i %% 10 == 0) {
+    message(paste("Processing neuron", i))
+  }
+  
+  FW_clone_N_temp <- tryCatch({
+    suppressWarnings({
+      suppressMessages({
+    compute_totals_indv_post(FW_clone_N[i])
+    })
+  })
+  }, error = function(e) {
+    message(paste("Error for neuron", i, "- Skipping neuron"))
+    return(NULL)
+  })
+  if (!is.null(FW_clone_N_temp)) {
+    FW_clone_N_out <- rbind(FW_clone_N_out, FW_clone_N_temp)
+  }
+}  
+```
+
+```{r}
+saveRDS(FW_clone_Y_in, "/Users/bhumpanya/Downloads/FW_clone_Y_in.RDS")
+saveRDS(FW_clone_N_in, "/Users/bhumpanya/Downloads/FW_clone_N_in.RDS")
+saveRDS(FW_clone_Y_out, "/Users/bhumpanya/Downloads/FW_clone_Y_out.RDS")
+saveRDS(FW_clone_N_out, "/Users/bhumpanya/Downloads/FW_clone_N_out.RDS")
+```
+
+```{r}
+FW_clone_Y_in <- readRDS("/Users/bhumpanya/Downloads/FW_clone_Y_in.RDS")
+FW_clone_N_in <- readRDS("/Users/bhumpanya/Downloads/FW_clone_N_in.RDS")
+FW_clone_Y_out <- readRDS("/Users/bhumpanya/Downloads/FW_clone_Y_out.RDS")
+FW_clone_N_out <- readRDS("/Users/bhumpanya/Downloads/FW_clone_N_out.RDS")
+```
+
+```{r}
+FW_complete_YandN$percent_dimorphic_input <- NA
+FW_complete_YandN$percent_dimorphic_output <- NA
+FW_complete_hemilineages2 <- FW_complete_YandN %>%
+  filter(!is.na(Fru)) %>% 
+  distinct(root_id, .keep_all = T)
+```
+
+```{r}
+s <- unlist(FW_complete_hemilineages2[["root_id"]]) 
+for(i in s) {
+  # Filter the neuron row
+  neuron <- FW_complete_hemilineages2 %>% filter(root_id == i)
+  index <- which(FW_complete_hemilineages2$root_id == i)
+  # Check the condition
+  if (neuron$Fru == "Y") {
+     if (i %in% FW_clone_Y_in[["query"]]){
+    # Find the index of the current neuron in the data frame
+    corresponding <- FW_clone_Y_in %>% filter(query == i)
+    # Update the specific column
+    FW_complete_hemilineages2[index, 6] <- 100*corresponding$weight / corresponding$total_weight
+     } else {
+      FW_complete_hemilineages2[index, 6] = 0
+    }
+  } else if (neuron$Fru == "N") {
+    if(i %in% FW_clone_N_in[["query"]]){
+    corresponding <- FW_clone_N_in %>% filter(query == i)
+    FW_complete_hemilineages2[index, 6] <- 100*corresponding$weight / corresponding$total_weight
+    } else {
+      FW_complete_hemilineages2[index, 6] = 0
+    }
+  } else {
+      FW_complete_hemilineages2[index, 6] = 0
+  }
+}
+
+s <- unlist(FW_complete_hemilineages2[["root_id"]]) 
+for(i in s) {
+  # Filter the neuron row
+  neuron <- FW_complete_hemilineages2 %>% filter(root_id == i)
+  index <- which(FW_complete_hemilineages2$root_id == i)
+  # Check the condition
+  if (neuron$Fru == "Y") {
+     if (i %in% FW_clone_Y_out[["query"]]){
+    # Find the index of the current neuron in the data frame
+    corresponding <- FW_clone_Y_out %>% filter(query == i)
+    # Update the specific column
+    FW_complete_hemilineages2[index, 7] <- 100*corresponding$weight / corresponding$total_weight
+     } else {
+      FW_complete_hemilineages2[index, 7] = 0
+    }
+  } else if (neuron$Fru == "N") {
+    if(i %in% FW_clone_N_out[["query"]]){
+    corresponding <- FW_clone_N_out %>% filter(query == i)
+    FW_complete_hemilineages2[index, 7] <- 100*corresponding$weight / corresponding$total_weight
+    } else {
+      FW_complete_hemilineages2[index, 7] = 0
+    }
+  } else {
+      FW_complete_hemilineages2[index, 7] = 0
+  }
+}
+```
+
+```{r}
+# Calculate mean percent_dimorphic_input for each clone and Fru
+FW_mean_values_i <- FW_complete_hemilineages2 %>%
+  group_by(clone, Fru) %>%
+  summarise(mean_percent_dimorphic_input = mean(percent_dimorphic_input, na.rm = TRUE))
+
+FW_mean_values_i <- FW_complete_hemilineages2 %>%
+  left_join(FW_mean_values_i, by = c("clone", "Fru"))
+```
+
+
+```{r}
+FW_complete_hemilineages2 <- FW_complete_hemilineages2 %>%
+  arrange(Fru)
+ggplot(data = FW_complete_hemilineages2, aes(x = clone, y = percent_dimorphic_input, color = Fru, shape = Fru)) +
+  geom_jitter(width = 0.2, size = 3, stroke = 1, fill = NA) +  # Plot the bodyid values with unfilled dots
+  geom_point(data = FW_mean_values_i, aes(x = clone, y = mean_percent_dimorphic_input, shape = Fru), 
+             size = 5, color = "black", fill = NA, stroke = 1.5, show.legend = FALSE) +
+  scale_shape_manual(values = c("Y" = 1, "N" = 0)) +  # Dot (16) for Fru == "Y", Square (15) for Fru == "N"
+  scale_color_manual(values = c("Y" = "orange2", "N" = "darkorchid2"))+
+  labs(
+    x = "Clone",
+    y = "Percent Dimorphic Input",
+    title = "Percent Dimorphic Input by Clone and Fru",
+    color = "Clone",
+    shape = "Fru"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1), 
+    axis.text = element_text(size = 15, family = "Avenir"),  # Adjust axis text size
+    axis.title.x = element_text(size = 18, family = "Avenir", margin = margin(t=20)), # Adjust axis title size
+     axis.title.y = element_text(size = 18, family = "Avenir"),
+    plot.title = element_text(size = 20, face = "italic", family = "Avenir"), # Adjust plot title size
+    legend.text = element_text(size = 18, family = "Avenir"),
+    legend.title = element_text(size = 20, family = "Avenir")
+    )
+```
+
+```{r}
+FW_mean_values_o <- FW_complete_hemilineages2 %>%
+  group_by(clone, Fru) %>%
+  summarise(mean_percent_dimorphic_output = mean(percent_dimorphic_output, na.rm = TRUE))
+
+FW_mean_values_o <- FW_complete_hemilineages2 %>%
+  left_join(FW_mean_values_o, by = c("clone", "Fru"))
+```
+
+```{r}
+FW_complete_hemilineages2 <- FW_complete_hemilineages2 %>%
+  arrange(Fru)
+ggplot(data = FW_complete_hemilineages2, aes(x = clone, y = percent_dimorphic_output, color = Fru, shape = Fru)) +
+  geom_jitter(width = 0.2, size = 3, stroke = 1, fill = NA) +  # Plot the bodyid values with unfilled dots
+  geom_point(data = FW_mean_values_o, aes(x = clone, y = mean_percent_dimorphic_output, shape = Fru), 
+             size = 5, color = "black", fill = NA, stroke = 1.5, show.legend = FALSE) +
+  scale_shape_manual(values = c("Y" = 1, "N" = 0)) +  # Dot (16) for Fru == "Y", Square (15) for Fru == "N"
+  scale_color_manual(values = c("Y" = "orange2", "N" = "darkorchid2"))+
+  labs(
+    x = "Clone",
+    y = "Percent Dimorphic Output",
+    title = "Percent Dimorphic Output by Clone and Fru",
+    color = "Clone",
+    shape = "Fru"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1), 
+    axis.text = element_text(size = 15, family = "Avenir"),  # Adjust axis text size
+    axis.title.x = element_text(size = 18, family = "Avenir", margin = margin(t=20)), # Adjust axis title size
+     axis.title.y = element_text(size = 18, family = "Avenir"),
+    plot.title = element_text(size = 20, face = "italic", family = "Avenir"), # Adjust plot title size
+    legend.text = element_text(size = 18, family = "Avenir"),
+    legend.title = element_text(size = 20, family = "Avenir")
+    )
+```
+
+
+```{r}
+ggplot(data = FW_complete_hemilineages2, aes(x = percent_dimorphic_input, y = percent_dimorphic_output, colour = clone, shape = Fru)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = T, aes(group = Fru, linetype = Fru)) +
+    labs(
+    x = "Percent dimorphic input",
+    y = "Percent dimorphic output",
+    title = "Percent Dimorphic Input and Percent Dimorphic Output by Clone and Fru",
+    color = "Clone",
+    shape = "Fru"
+  ) +
+  theme_minimal() +
+    scale_shape_manual(values = c("Y" = 16, "N" = 15)) + 
+    theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1), 
+    axis.text = element_text(size = 15, family = "Avenir"),  # Adjust axis text size
+    axis.title.x = element_text(size = 18, family = "Avenir", margin = margin(t=20)), # Adjust axis title size
+     axis.title.y = element_text(size = 18, family = "Avenir"),
+    plot.title = element_text(size = 20, face = "italic", family = "Avenir"), # Adjust plot title size
+    legend.text = element_text(size = 18, family = "Avenir"),
+    legend.title = element_text(size = 20, family = "Avenir")
+    )
+```
+
+```{r}
+FW_unmatched_Y <- FW_complete_hemilineages2 %>% filter(clone == "FW_aSP-a" & Fru == "Y") %>% select(root_id) %>% unlist()
+FW_unmatched_N <- FW_complete_hemilineages2 %>% filter(clone == "FW_aSP-a" & Fru == "N") %>% select(root_id) %>% unlist()
+```
+
+
+```{r}
+s <- length(FW_unmatched_Y)
+for(i in 1:s)
+{
+  if (i %% 10 == 0) {
+    message(paste("Processing neuron", i))
+  }
+  
+  FW_clone_Y_temp <- tryCatch({
+    suppressWarnings({
+      suppressMessages({
+    compute_totals_indv_pre(FW_unmatched_Y[i])
+    })
+  })
+  }, error = function(e) {
+    message(paste("Error for neuron", i, "- Skipping neuron"))
+    return(NULL)  # Return NULL if there's an error
+  })
+  
+  # Only bind the result if it's not NULL
+  if (!is.null(FW_clone_Y_temp)) {
+    FW_clone_Y_in <- rbind(FW_clone_Y_in, FW_clone_Y_temp)
+  }
+}  
+
+s <- length(FW_unmatched_N)
+for(i in 1:s)
+{
+  if (i %% 10 == 0) {
+    message(paste("Processing neuron", i))
+  }
+  
+  FW_clone_N_temp <- tryCatch({
+    suppressWarnings({
+      suppressMessages({
+    compute_totals_indv_pre(FW_unmatched_N[i])
+    })
+  })
+  }, error = function(e) {
+    message(paste("Error for neuron", i, "- Skipping neuron"))
+    return(NULL)
+  })
+  if (!is.null(FW_clone_N_temp)) {
+    FW_clone_N_in <- rbind(FW_clone_N_in, FW_clone_N_temp)
+  }
+}  
+
+s <- length(FW_unmatched_Y)
+for(i in 1:s)
+{
+  if (i %% 10 == 0) {
+    message(paste("Processing neuron", i))
+  }
+  
+  FW_clone_Y_temp <- tryCatch({
+    suppressWarnings({
+      suppressMessages({
+    compute_totals_indv_post(FW_unmatched_Y[i])
+    })
+  })
+  }, error = function(e) {
+    message(paste("Error for neuron", i, "- Skipping neuron"))
+    return(NULL)  
+  })
+  
+  if (!is.null(FW_clone_Y_temp)) {
+    FW_clone_Y_out <- rbind(FW_clone_Y_out, FW_clone_Y_temp)
+  }
+}  
+
+s <- length(FW_unmatched_N)
+for(i in 1:s)
+{
+  if (i %% 10 == 0) {
+    message(paste("Processing neuron", i))
+  }
+  
+  FW_clone_N_temp <- tryCatch({
+    suppressWarnings({
+      suppressMessages({
+    compute_totals_indv_post(FW_unmatched_N[i])
+    })
+  })
+  }, error = function(e) {
+    message(paste("Error for neuron", i, "- Skipping neuron"))
+    return(NULL)
+  })
+  if (!is.null(FW_clone_N_temp)) {
+    FW_clone_N_out <- rbind(FW_clone_N_out, FW_clone_N_temp)
+  }
+}  
+```
+
+```{r}
+FW_complete_clones <- FW_complete_hemilineages2 %>% 
+  group_by(clone, Fru) %>%
+  mutate(average_dimorphic_input = mean(percent_dimorphic_input)) %>%
+  mutate(average_dimorphic_output = mean(percent_dimorphic_output)) %>%
+  select(clone, Fru, average_dimorphic_output, average_dimorphic_input) %>%
+  unique()
+
+FW_complete_clones <- FW_complete_clones %>%
+  mutate(clone = str_remove(clone, "^FW_"))
+
+```
+
+```{r}
+ggplot(FW_complete_clones, aes(x = average_dimorphic_input, y = average_dimorphic_output, color = clone)) +
+  geom_point(aes(shape = Fru), size = 5) + # Use shape to distinguish Fru
+  geom_line(aes(group = clone), size = 1, alpha = 0.5) +
+  xlim(0,40) +
+  ylim(0,40) +
+  scale_shape_manual(values = c(17, 19, 21)) + # Open dot for Fru=="Y" (21) and closed dot for Fru=="N" (19)
+  labs(x = "Percent Dimorphic Input", y = "Percent Dimorphic Output", title = "Female Fru+ Input vs Output") +
+  theme_minimal() +
+  theme(legend.position = "right",
+        axis.text = element_text(size = 15, family = "Avenir"),  # Adjust axis text size
+        axis.title = element_text(size = 18, family = "Avenir"), # Adjust axis title size
+        plot.title = element_text(size = 20, face = "italic", family = "Avenir"), # Adjust plot title size
+        legend.text = element_text(size = 18, family = "Avenir"),
+        legend.title = element_text(size = 20, family = "Avenir")
+  )
+```

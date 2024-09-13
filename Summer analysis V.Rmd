@@ -1,0 +1,300 @@
+---
+title: "Summer analysis V"
+author: "Bhumpanya Chaisrisawatsuk"
+date: "2024-08-20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(googlesheets4)
+library(malecns)
+library(dplyr)
+library(nat.nblast)
+library(fafbseg)
+library(tidyverse)
+library(coconatfly)
+library(dendextend)
+library(ggplot2)
+library(arrow)
+```
+
+```{r}
+FW_clone_Y_table <- FW_complete_hemilineages %>% filter(Fru == "Y") 
+FW_clone_N_table <- FW_complete_hemilineages %>% filter(Fru == "N") 
+FW_clone_Y_root_id <- FW_clone_Y_table$root_id
+FW_clone_N_root_id <- FW_clone_N_table$root_id
+FW_clone_Y <- as.character(FW_clone_Y_root_id)
+FW_clone_N <- as.character(FW_clone_N_root_id)
+```
+
+```{r}
+FW_clone_Y_in2 <- data.frame()
+for (i in FW_clone_Y)
+{
+  FW_Y_temp <- readRDS(paste0("~/Downloads/FW_partners2/", i,".RDS"))
+  FW_Y_temp2 <- FW_Y_temp %>% 
+    mutate(total_weight = sum(weight)) %>%
+    ungroup()
+  FW_Y_temp2$dimorphic_partner <- ifelse(FW_Y_temp2$pre_id %in% FW.Y$root_id, "Y", "N")
+  FW_dimorphic_summary <- FW_Y_temp2 %>%
+  group_by(dimorphic_partner) %>%
+  summarise(weight = sum(weight), .groups = 'drop') %>% 
+    filter(dimorphic_partner == "Y")
+  FW_dimorphic_total <- FW_Y_temp2 %>% 
+    select(dimorphic_partner, total_weight) %>%
+    distinct()
+  FW_dimorphic_total$query <- i
+  FWdm2 <- FW_dimorphic_summary %>%
+  left_join(FW_dimorphic_total, by = "dimorphic_partner")
+  FW_clone_Y_in2 <- rbind(FW_clone_Y_in2, FWdm2)
+}
+```
+
+```{r}
+FW_clone_N_in2 <- data.frame()
+for (i in FW_clone_N)
+{
+  FW_N_temp <- readRDS(paste0("~/Downloads/FW_partners2/", i,".RDS"))
+  FW_N_temp2 <- FW_N_temp %>% 
+    mutate(total_weight = sum(weight)) %>%
+    ungroup()
+  FW_N_temp2$dimorphic_partner <- ifelse(FW_N_temp2$pre_id %in% FW.Y$root_id, "Y", "N")
+  FW_dimorphic_summary <- FW_N_temp2 %>%
+  group_by(dimorphic_partner) %>%
+  summarise(weight = sum(weight), .groups = 'drop') %>% 
+    filter(dimorphic_partner == "Y")
+  FW_dimorphic_total <- FW_N_temp2 %>% 
+    select(dimorphic_partner, total_weight) %>%
+    distinct()
+  FW_dimorphic_total$query <- i
+  FWdm2 <- FW_dimorphic_summary %>%
+  left_join(FW_dimorphic_total, by = "dimorphic_partner")
+  FW_clone_N_in2 <- rbind(FW_clone_N_in2, FWdm2)
+}
+```
+
+
+```{r}
+FW_clone_Y_out2 <- data.frame()
+for (i in FW_clone_Y)
+{
+  FW_Y_temp <- readRDS(paste0("~/Downloads/FW_partners/", i,".RDS"))
+  FW_Y_temp2 <- FW_Y_temp %>% 
+    mutate(total_weight = sum(weight)) %>%
+    ungroup()
+  FW_Y_temp2$dimorphic_partner <- ifelse(FW_Y_temp2$post_id %in% FW.Y$root_id, "Y", "N")
+  FW_dimorphic_summary <- FW_Y_temp2 %>%
+  group_by(dimorphic_partner) %>%
+  summarise(weight = sum(weight), .groups = 'drop') %>% 
+    filter(dimorphic_partner == "Y")
+  FW_dimorphic_total <- FW_Y_temp2 %>% 
+    select(dimorphic_partner, total_weight) %>%
+    distinct()
+  FW_dimorphic_total$query <- i
+  FWdm2 <- FW_dimorphic_summary %>%
+  left_join(FW_dimorphic_total, by = "dimorphic_partner")
+  FW_clone_Y_out2 <- rbind(FW_clone_Y_out2, FWdm2)
+}
+```
+
+```{r}
+FW_clone_N_out2 <- NULL
+for (i in FW_clone_N)
+{
+  FW_N_temp <- readRDS(paste0("~/Downloads/FW_partners/", i,".RDS"))
+  FW_N_temp2 <- FW_N_temp %>% 
+    mutate(total_weight = sum(weight)) %>%
+    ungroup()
+  FW_N_temp2$dimorphic_partner <- ifelse(FW_N_temp2$post_id %in% FW.Y$root_id, "Y", "N")
+  FW_dimorphic_summary <- FW_N_temp2 %>%
+  group_by(dimorphic_partner) %>%
+  summarise(weight = sum(weight), .groups = 'drop') %>% 
+    filter(dimorphic_partner == "Y")
+  FW_dimorphic_total <- FW_N_temp2 %>% 
+    select(dimorphic_partner, total_weight) %>%
+    distinct()
+    FW_dimorphic_total$query <- i
+  FWdm2 <- FW_dimorphic_summary %>%
+  left_join(FW_dimorphic_total, by = "dimorphic_partner")
+  FW_clone_N_out2 <- rbind(FW_clone_N_out2, FWdm2)
+}
+```
+
+```{r}
+FW_complete_YandN$percent_dimorphic_input <- NA
+FW_complete_YandN$percent_dimorphic_output <- NA
+FW_complete_hemilineages2 <- FW_complete_YandN %>%
+  filter(!is.na(Fru)) %>% 
+  distinct(root_id, .keep_all = T)
+```
+
+```{r}
+s <- unlist(FW_complete_hemilineages2[["root_id"]]) 
+for(i in s) {
+  # Filter the neuron row
+  neuron <- FW_complete_hemilineages2 %>% filter(root_id == i)
+  index <- which(FW_complete_hemilineages2$root_id == i)
+  # Check the condition
+  if (neuron$Fru == "Y") {
+     if (i %in% FW_clone_Y_out2[["query"]]){
+    # Find the index of the current neuron in the data frame
+    corresponding <- FW_clone_Y_out2 %>% filter(query == i)
+    # Update the specific column
+    FW_complete_hemilineages2[index, 7] <- 100*corresponding$weight / corresponding$total_weight
+     } else {
+      FW_complete_hemilineages2[index, 7] = 0
+    }
+  } else if (neuron$Fru == "N") {
+    if(i %in% FW_clone_N_out2[["query"]]){
+    corresponding <- FW_clone_N_out2 %>% filter(query == i)
+    FW_complete_hemilineages2[index, 7] <- 100*corresponding$weight / corresponding$total_weight
+    } else {
+      FW_complete_hemilineages2[index, 7] = 0
+    }
+  } else {
+      FW_complete_hemilineages2[index, 7] = 0
+  }
+}
+```
+
+```{r}
+s <- unlist(FW_complete_hemilineages2[["root_id"]]) 
+for(i in s) {
+  # Filter the neuron row
+  neuron <- FW_complete_hemilineages2 %>% filter(root_id == i)
+  index <- which(FW_complete_hemilineages2$root_id == i)
+  # Check the condition
+  if (neuron$Fru == "Y") {
+     if (i %in% FW_clone_Y_in2[["query"]]){
+    # Find the index of the current neuron in the data frame
+    corresponding <- FW_clone_Y_in2 %>% filter(query == i)
+    # Update the specific column
+    FW_complete_hemilineages2[index, 6] <- 100*corresponding$weight / corresponding$total_weight
+     } else {
+      FW_complete_hemilineages2[index, 6] = 0
+    }
+  } else if (neuron$Fru == "N") {
+    if(i %in% FW_clone_N_in2[["query"]]){
+    corresponding <- FW_clone_N_in2 %>% filter(query == i)
+    FW_complete_hemilineages2[index, 6] <- 100*corresponding$weight / corresponding$total_weight
+    } else {
+      FW_complete_hemilineages2[index, 6] = 0
+    }
+  } else {
+      FW_complete_hemilineages2[index, 6] = 0
+  }
+}
+```
+
+```{r}
+FWpartner_aDT_b <- data.frame()
+subset <- FW_complete_YandN[FW_complete_YandN$clone == "FW_aSP-i" & FW_complete_YandN$Fru == "Y", "root_id"]
+subset <- unlist(subset)
+s <- length(subset)
+for(i in 1:s)
+{
+  j <- subset[i]
+  partners <- readRDS(paste0("~/Downloads/FW_partners/",j,".RDS"))
+  colnames(partners)[colnames(partners) == "post_id"] <- "root_id"
+  FW_temp_clone <- merge(partners, FW_combined_data[, c("root_id", "clone")], 
+                      by = "root_id", 
+                      all.x = TRUE)
+  FWpartner_aDT_b <- rbind(FWpartner_aDT_b, FW_temp_clone)
+}
+```
+
+```{r}
+FW_aDT_b_tot <- sum(FWpartner_aDT_b$weight)
+FWpartner2_aDT_b <- FWpartner_aDT_b %>% filter(!is.na(clone))
+FW_aDT_b_partner_weight <- FWpartner2_aDT_b %>%
+  group_by(clone) %>%
+  summarize(total_weight = sum(weight, na.rm = TRUE))
+FW_aDT_b_partner_weight$percent_weight <- 100*FW_aDT_b_partner_weight$total_weight/FW_aDT_b_tot
+FW_aDT_b_partner_weight <- FW_aDT_b_partner_weight %>% arrange(desc(percent_weight))
+FW_aDT_b_partner_weight$clone <- factor(FW_aDT_b_partner_weight$clone, 
+                                         levels = FW_aDT_b_partner_weight$clone)
+```
+
+```{r}
+ggplot(FW_aDT_b_partner_weight, aes(x = clone, y = percent_weight, fill = clone)) +
+  geom_bar(stat = "identity") + 
+  labs(x = "Clone", y = "Percent Weight", title = "Percent Weight by Clone") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5),
+            axis.text = element_text(size = 15, family = "Avenir"),  # Adjust axis text size
+    axis.title.x = element_text(size = 18, family = "Avenir", margin = margin(t=20)), # Adjust axis title size
+     axis.title.y = element_text(size = 18, family = "Avenir"),
+    plot.title = element_text(size = 20, face = "italic", family = "Avenir"), # Adjust plot title size
+    legend.text = element_text(size = 18, family = "Avenir"),
+    legend.title = element_text(size = 20, family = "Avenir"))
+```
+
+```{r}
+partner_aDT_c <- data.frame()
+clone_neurons <- unlist(combined_data[combined_data$clone == "aSP-i" & combined_data$Fru == "Y", "bodyid"])
+  connection_table <- mcns_connection_table(clone_neurons, partners = "o", threshold = 2)
+  colnames(connection_table)[colnames(connection_table) == "bodyid"] <- "query"
+  colnames(connection_table)[colnames(connection_table) == "partner"] <- "bodyid"
+  clone_conn <- merge(connection_table, complete_hemilineages[, c("bodyid", "clone", "Fru")], 
+                      by = "bodyid", 
+                      all.x = TRUE)
+  partner_aDT_c <- rbind(partner_aDT_c, clone_conn)
+```
+
+```{r}
+aDT_c_tot <- sum(partner_aDT_c$weight)
+partner2_aDT_c <- partner_aDT_c %>% filter(!is.na(clone))
+aDT_c_partner_weight <- partner2_aDT_c %>%
+  group_by(clone, Fru) %>%
+  summarize(total_weight = sum(weight, na.rm = TRUE))
+aDT_c_partner_weight$percent_weight <- 100*aDT_c_partner_weight$total_weight/aDT_c_tot
+aDT_c_partner_weight <- aDT_c_partner_weight %>%
+  filter(Fru == "Y") %>%
+  arrange(desc(percent_weight))
+aDT_c_partner_weight$clone <- factor(aDT_c_partner_weight$clone, 
+                                         levels = aDT_c_partner_weight$clone)
+```
+
+```{r}
+ggplot(aDT_c_partner_weight, aes(x = clone, y = percent_weight, fill = clone)) +
+  geom_bar(stat = "identity") + 
+  labs(x = "Clone", y = "Percent Weight", title = "Percent Weight by Clone") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5),
+            axis.text = element_text(size = 15, family = "Avenir"),  # Adjust axis text size
+    axis.title.x = element_text(size = 18, family = "Avenir", margin = margin(t=20)), # Adjust axis title size
+     axis.title.y = element_text(size = 18, family = "Avenir"),
+    plot.title = element_text(size = 20, face = "italic", family = "Avenir"), # Adjust plot title size
+    legend.text = element_text(size = 18, family = "Avenir"),
+    legend.title = element_text(size = 20, family = "Avenir"))
+```
+
+```{r}
+FW_clone_percent_input <- FW_complete_hemilineages2 %>%
+    group_by(clone, Fru) %>%
+    summarize(mean_dimorphic_input = mean(percent_dimorphic_input, na.rm = TRUE))
+FW_clone_percent_output <- FW_complete_hemilineages2 %>% 
+    group_by(clone, Fru) %>%
+    summarize(mean_dimorphic_output = mean(percent_dimorphic_output, na.rm = T))
+FW_clone_percent <- FW_clone_percent_input %>% left_join(FW_clone_percent_output, by = c("clone", "Fru"))
+```
+
+```{r}
+ggplot(FW_clone_percent, aes(x = mean_dimorphic_input, y = mean_dimorphic_output, color = clone)) +
+  geom_point(aes(shape = Fru), size = 5) + # Use shape to distinguish Fru
+  geom_line(aes(group = clone), size = 1, alpha = 0.5) +
+  scale_shape_manual(values = c(17, 19, 21)) + # Open dot for Fru=="Y" (21) and closed dot for Fru=="N" (19)
+  labs(x = "Percent Dimorphic Input", y = "Percent Dimorphic Output", title = "Dimorphic Input vs Output") +
+  theme_minimal() +
+  theme(legend.position = "right",
+    axis.text = element_text(size = 15, family = "Avenir"), 
+    axis.title = element_text(size = 18, family = "Avenir"),
+    plot.title = element_text(size = 20, face = "italic", family = "Avenir"), 
+    legend.text = element_text(size = 18, family = "Avenir"),
+    legend.title = element_text(size = 20, family = "Avenir")
+  )
+```

@@ -1,0 +1,473 @@
+---
+title: "Summer analysis VI"
+author: "Bhumpanya Chaisrisawatsuk"
+date: "2024-08-21"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(malecns)
+library(dplyr)
+library(nat.nblast)
+library(fafbseg)
+library(tidyverse)
+library(coconatfly)
+library(ggplot2)
+library(arrow)
+library(igraph)
+library(visNetwork)
+```
+
+```{r}
+clone <- unlist(FW_combined_data$clone)
+clone <- clone %>% unique()
+FW_allclone_o <- data.frame()
+for(cl in clone)
+{
+  message("Processing clone ", cl)
+  FW_byclone_o <- data.frame()
+  subset <- FW_combined_data[FW_combined_data$clone == cl & FW_combined_data$Fru =="Y", "root_id"]
+  subset <- unlist(subset)
+  s <- length(subset)
+  for(i in 1:s)
+  {
+    j <- subset[i]
+    partners <- readRDS(paste0("~/Downloads/FW_partners/",j,".RDS"))
+    colnames(partners)[colnames(partners) == "post_id"] <- "root_id"
+    FW_temp_clone <- merge(partners, FW_combined_data[, c("root_id", "clone", "Fru")], 
+                      by = "root_id", 
+                      all.x = TRUE)
+    FW_byclone_o <- rbind(FW_byclone_o, FW_temp_clone)
+  }
+  FW_byclone_o$query_clone <- cl
+  FW_allclone_o <- rbind(FW_allclone_o, FW_byclone_o)
+}
+```
+
+```{r}
+FW_allclone_o_tot <- FW_allclone_o %>% 
+  group_by(query_clone) %>%
+  summarize(total_weight = sum(weight, na.rm = T))
+FW_allclone_o_fru <- FW_allclone_o %>% filter(!is.na(clone))
+FW_allclone_o_weight <- FW_allclone_o_fru %>%
+  group_by(query_clone, clone, Fru) %>%
+  summarize(fru_weight = sum(weight, na.rm = TRUE))
+FW_allclone_o_com <- FW_allclone_o_weight %>%
+  left_join(FW_allclone_o_tot, by = "query_clone")
+FW_allclone_o_com$percent_weight <- 100*FW_allclone_o_com$fru_weight/FW_allclone_o_com$total_weight
+FW_allclone_o_com <- FW_allclone_o_com %>%
+  filter(Fru == "Y") %>% 
+  arrange(desc(query_clone),desc(clone))
+```
+
+```{r}
+c = length(clone)
+FW_adj <- matrix(nrow = c, ncol = c)
+clone_short <- sub("^FW_", "", clone)
+colnames(FW_adj) = rownames(FW_adj) = clone_short
+for(ca in clone)
+{
+  for(cb in clone)
+  {
+    filtered_FW_allclone_o_com <- FW_allclone_o_com %>% filter(query_clone == ca)
+    percent_by_pair <- filtered_FW_allclone_o_com %>% filter(clone == cb) 
+    percent_by_pair <- unlist(percent_by_pair$percent_weight)
+    canum <- which(clone == ca)
+    cbnum <- which(clone == cb)
+    if(length(percent_by_pair) > 0 && !is.na(percent_by_pair))
+    {
+    FW_adj[canum, cbnum] <- percent_by_pair
+    }else{
+      FW_adj[canum, cbnum] <- 0
+    }
+  }
+}
+```
+
+```{r}
+# Create a graph object from the adjacency matrix
+network <- graph_from_adjacency_matrix(FW_adj, mode = "directed", weighted = TRUE, diag = F)
+
+# Extract edge weights from the graph
+edge_weights <- E(network)$weight
+
+# Scale the edge weights to determine the edge widths
+scaled_edge_widths <- edge_weights / max(edge_weights)*20  
+
+# Set edge color with transparency (e.g., "black" with 50% transparency)
+transparent_edge_color <- adjustcolor("black", alpha.f = 0.5)
+
+node_categories <- c("olfactory", "auditory", "visual", "auditory", "olfactory", "olfactory", "auditory", "visual", "auditory", "olfactory", "auditory", "gustatory", "olfactory", "visual", "auditory", "auditory", "descending", "olfactory", "visual", "auditory", "olfactory", "auditory", "olfactory", "olfactory", "olfactory", "visual", "visual", "auditory", "auditory", "visual", "visual", "visual", "visual", "auditory", "auditory", "auditory", "auditory", "auditory", "visual", "auditory", "descending", "auditory", "auditory", "auditory", "auditory", "visual", "auditory", "auditory")
+
+# Map categories to colors
+category_colors <- c(
+  "olfactory" = "pink",
+  "auditory" = "lightblue1",
+  "visual" = "palegreen1",
+  "gustatory" = "violet",
+  "descending" = "bisque"
+)
+
+# Assign colors to nodes based on their category
+vertex_colours <- category_colors[node_categories]
+
+# Initialize an empty vector to store edge colors
+edge_colours <- rep(NA, length(E(network)))
+
+# Iterate over each edge and assign color based on direction
+for (i in seq_along(E(network))) {
+  edge <- E(network)[i]
+  source_node <- ends(network, edge)[1]  # Get the source node name
+  target_node <- ends(network, edge)[2]  # Get the target node name
+  
+  # Find the indices of the source and target nodes in the clone_short list
+  source_index <- match(source_node, clone_short)
+  target_index <- match(target_node, clone_short)
+  
+  # Compare indices and assign color
+  if (source_index < target_index) {
+    edge_colours[i] <- "blue"  # Source is higher, target is lower
+  } else {
+    edge_colours[i] <- "red"   # Source is lower, target is higher
+  }
+}
+
+# Plot the graph with custom edge widths and transparency
+plot(
+  network,
+  layout = layout_with_fr,
+  vertex.color = vertex_colours,
+  vertex.frame.color = "white",
+  vertex.size = 15,
+  vertex.label.family = "Avenir",
+  edge.width = scaled_edge_widths,                   
+  edge.color = adjustcolor(edge_colours, alpha.f = 0.5),               
+  edge.arrow.size = 0.1,
+  edge.arrow.mode = 2,
+  edge.curved = 0.1
+)
+
+```
+
+```{r}
+community_walktrap <- cluster_walktrap(network, weights = E(network)$weight)
+membership_walktrap <- membership(community_walktrap)
+cluster_colors <- c("plum1", "khaki1", "dodgerblue", "palegreen", "coral1")  # Create a color for each cluster
+vertex_colors_cluster <- cluster_colors[membership_walktrap]
+```
+
+```{r}
+plot(
+  network,
+  layout = layout_with_fr,
+  vertex.color = vertex_colors_cluster,  # Use cluster-based colors
+  vertex.frame.color = "white",
+  vertex.size = 15,
+  vertex.label.family = "Avenir",
+  edge.width = scaled_edge_widths,                   
+  edge.color = transparent_edge_color,               
+  edge.arrow.size = 0.1,
+  edge.curved = 0.1
+)
+```
+
+
+
+
+```{r}
+clone <- unlist(FW_combined_data$clone)
+clone <- clone %>% unique()
+FW_allclone_i <- data.frame()
+for(cl in clone)
+{
+  message("Processing clone ", cl)
+  FW_byclone_i <- data.frame()
+  subset <- FW_combined_data[FW_combined_data$clone == cl & FW_combined_data$Fru =="Y", "root_id"]
+  subset <- unlist(subset)
+  s <- length(subset)
+  for(i in 1:s)
+  {
+    j <- subset[i]
+    partners <- readRDS(paste0("~/Downloads/FW_partners2/",j,".RDS"))
+    colnames(partners)[colnames(partners) == "pre_id"] <- "root_id"
+    FW_temp_clone <- merge(partners, FW_combined_data[, c("root_id", "clone", "Fru")], 
+                      by = "root_id", 
+                      all.x = TRUE)
+    FW_byclone_i <- rbind(FW_byclone_i, FW_temp_clone)
+  }
+  FW_byclone_i$query_clone <- cl
+  FW_allclone_i <- rbind(FW_allclone_i, FW_byclone_i)
+}
+```
+
+```{r}
+FW_allclone_i_tot <- FW_allclone_i %>% 
+  group_by(query_clone) %>%
+  summarize(total_weight = sum(weight, na.rm = T))
+FW_allclone_i_fru <- FW_allclone_i %>% filter(!is.na(clone))
+FW_allclone_i_weight <- FW_allclone_i_fru %>%
+  group_by(query_clone, clone, Fru) %>%
+  summarize(fru_weight = sum(weight, na.rm = TRUE))
+FW_allclone_i_com <- FW_allclone_i_weight %>%
+  left_join(FW_allclone_i_tot, by = "query_clone")
+FW_allclone_i_com$percent_weight <- 100*FW_allclone_i_com$fru_weight/FW_allclone_i_com$total_weight
+FW_allclone_i_com <- FW_allclone_i_com %>% 
+  filter(Fru == "Y") %>%
+  arrange(desc(query_clone),desc(clone))
+```
+
+```{r}
+c = length(clone)
+FW_adj2 <- matrix(nrow = c, ncol = c)
+clone_short <- sub("^FW_", "", clone)
+colnames(FW_adj2) = rownames(FW_adj2) = clone_short
+for(ca in clone)
+{
+  for(cb in clone)
+  {
+    filtered_FW_allclone_i_com <- FW_allclone_i_com %>% filter(query_clone == ca)
+    percent_by_pair <- filtered_FW_allclone_i_com %>% filter(clone == cb) 
+    percent_by_pair <- unlist(percent_by_pair$percent_weight)
+    canum <- which(clone == ca)
+    cbnum <- which(clone == cb)
+    if(length(percent_by_pair) > 0 && !is.na(percent_by_pair))
+    {
+    FW_adj2[canum, cbnum] <- percent_by_pair
+    }else{
+      FW_adj2[canum, cbnum] <- 0
+    }
+  }
+}
+```
+
+```{r}
+# Create a graph object from the adjacency matrix
+network2 <- graph_from_adjacency_matrix(FW_adj2, mode = "directed", weighted = TRUE, diag = FALSE)
+
+# Extract edge weights from the graph
+edge_weights <- E(network2)$weight
+
+# Scale the edge weights to determine the edge widths
+scaled_edge_widths <- edge_weights / max(edge_weights) * 20  # Adjust the multiplier for more differentiation
+
+# Set edge color with transparency (e.g., "black" with 50% transparency)
+transparent_edge_color <- adjustcolor("black", alpha.f = 0.5)
+
+node_categories <- c("olfactory", "auditory", "visual", "auditory", "olfactory", "olfactory", "auditory", "visual", "auditory", "auditory", "gustatory", "olfactory", "visual", "auditory", "auditory", "descending", "olfactory", "visual", "auditory", "olfactory", "auditory", "olfactory", "olfactory", "olfactory", "visual", "visual", "auditory", "auditory", "visual", "visual", "visual", "visual", "auditory", "auditory", "auditory", "auditory", "auditory", "visual", "auditory", "descending", "auditory", "auditory", "auditory", "auditory", "visual", "auditory", "auditory")
+
+# Map categories to colors
+category_colors <- c(
+  "olfactory" = "pink",
+  "auditory" = "lightblue1",
+  "visual" = "palegreen1",
+  "gustatory" = "violet",
+  "descending" = "bisque"
+)
+
+# Assign colors to nodes based on their category
+vertex_colors <- category_colors[node_categories]
+
+# Plot the graph with custom edge widths and transparency
+plot(
+  network2,
+  vertex.color = vertex_colors,
+  vertex.frame.color = "white",
+  vertex.size = 15,
+  vertex.label.family = "Avenir",
+  edge.width = scaled_edge_widths,                   # Set edge width based on scaled weights
+  edge.color = transparent_edge_color,               # Set edge color with transparency
+  edge.arrow.size = 0.1,
+  edge.curved = 0.1
+)
+```
+
+```{r}
+community_walktrap <- cluster_walktrap(network2, weights = E(network2)$weight)
+membership_walktrap <- membership(community_walktrap)
+cluster_colors <- c("plum1", "khaki1", "dodgerblue", "palegreen", "coral1")  # Create a color for each cluster
+vertex_colors_cluster <- cluster_colors[membership_walktrap]
+```
+
+```{r}
+plot(
+  network2,
+  layout = layout_with_fr,
+  vertex.color = vertex_colors_cluster,  # Use cluster-based colors
+  vertex.frame.color = "white",
+  vertex.size = 15,
+  vertex.label.family = "Avenir",
+  edge.width = scaled_edge_widths,                   
+  edge.color = transparent_edge_color,               
+  edge.arrow.size = 0.1,
+  edge.curved = 0.1
+)
+```
+
+
+
+
+
+```{r}
+clone <- unlist(combined_data$clone)
+clone <- clone %>% unique()
+allclone_o <- data.frame()
+for(cl in clone)
+{
+tryCatch({
+clone_neurons <- unlist(combined_data[combined_data$clone == cl & combined_data$Fru == "Y", "bodyid"])
+    #connection_table <- mcns_connection_table(clone_neurons, partners = "o", threshold = 2)
+    #saveRDS(connection_table, paste0("~/Downloads/MCNS_partners/", cl, ".RDS"))
+    connection_table <- readRDS(paste0("~/Downloads/MCNS_partners/", cl, ".RDS"))
+    colnames(connection_table)[colnames(connection_table) == "bodyid"] <- "query"
+    colnames(connection_table)[colnames(connection_table) == "partner"] <- "bodyid"
+    byclone_o <- merge(connection_table, combined_data[, c("bodyid", "clone", "Fru")], 
+                      by = "bodyid", 
+                      all.x = TRUE)
+  message(cl)
+  byclone_o$query_clone <- cl
+  allclone_o <- rbind(allclone_o, byclone_o)
+}, error = function(e) {
+    message(paste("Skipping sheet:", cl))})
+}
+```
+
+
+```{r}
+allclone_o_tot <- allclone_o %>%
+  group_by(query_clone) %>%
+  summarize(total_weight = sum(weight, na.rm = T)) %>%
+  ungroup()
+allclone_o_fru <- allclone_o %>% filter(!is.na(clone))
+allclone_o_weight <- allclone_o_fru %>%
+  group_by(query_clone, clone, Fru) %>%
+  summarize(weight = sum(weight, na.rm = TRUE)) %>%
+  ungroup()
+allclone_o_com <- allclone_o_weight %>%
+  left_join(allclone_o_tot, by = "query_clone")
+allclone_o_com$percent_weight <- 100*allclone_o_com$weight/allclone_o_com$total_weight
+allclone_o_com <- allclone_o_com %>% 
+  filter(Fru == "Y") %>%
+  arrange(desc(query_clone), desc(clone))
+```
+
+```{r}
+clone <- clone[clone != "pSG-a"]
+clone <- clone[clone != "aIP-f"]
+c = length(clone)
+FW_adj3 <- matrix(nrow = c, ncol = c)
+colnames(FW_adj3) = rownames(FW_adj3) = clone
+for(ca in clone)
+{
+  for(cb in clone)
+  {
+    filtered_allclone_o_com <- allclone_o_com %>% filter(query_clone == ca)
+    percent_by_pair <- filtered_allclone_o_com %>% filter(clone == cb) 
+    percent_by_pair <- unlist(percent_by_pair$percent_weight)
+    canum <- which(clone == ca)
+    cbnum <- which(clone == cb)
+    if(length(percent_by_pair) > 0 && !is.na(percent_by_pair))
+    {
+    FW_adj3[canum, cbnum] <- percent_by_pair
+    }else{
+      FW_adj3[canum, cbnum] <- 0
+    }
+  }
+}
+```
+
+```{r}
+network3 <- graph_from_adjacency_matrix(FW_adj3, mode = "directed", weighted = TRUE, diag = FALSE)
+
+edge_weights <- E(network3)$weight
+
+scaled_edge_widths <- edge_weights / max(edge_weights) *10
+
+node_categories <- c("olfactory", "gustatory", "visual", "auditory", "olfactory", "olfactory", "auditory", "visual", "auditory", "olfactory","auditory", "gustatory", "olfactory", "auditory", "auditory", "descending", "olfactory", "visual", "auditory", "olfactory", "auditory", "olfactory", "olfactory", "olfactory", "visual", "visual", "auditory", "auditory", "visual", "descending", "visual", "visual", "visual", "auditory", "auditory", "auditory", "auditory", "auditory", "visual", "descending", "auditory", "auditory", "auditory", "auditory", "auditory", "auditory", "visual", "auditory")
+
+# Map categories to colors
+category_colors <- c(
+  "olfactory" = "pink",
+  "auditory" = "lightblue1",
+  "visual" = "palegreen1",
+  "gustatory" = "violet",
+  "descending" = "bisque"
+)
+
+vertex_colours <- category_colors[node_categories]
+
+edge_colours <- rep(NA, length(E(network)))
+
+for (i in seq_along(E(network))) {
+  edge <- E(network)[i]
+  source_node <- ends(network, edge)[1]  
+  target_node <- ends(network, edge)[2]  
+  
+  source_index <- match(source_node, clone_short)
+  target_index <- match(target_node, clone_short)
+
+  if (source_index < target_index) {
+    edge_colours[i] <- "blue"  
+  } else {
+    edge_colours[i] <- "red" 
+  }
+}
+
+plot(
+  network3,
+  layout = layout_with_dh,
+  vertex.color = vertex_colours,
+  vertex.frame.color = "white",
+  vertex.size = 15,
+  vertex.label.family = "Avenir",
+  edge.width = scaled_edge_widths,                  
+  edge.color = adjustcolor(edge_colours, alpha.f = 0.5),             
+  edge.arrow.size = 0.1,
+  edge.curved = 0.2
+)
+```
+
+```{r}
+clone <- unlist(combined_data$clone)
+clone <- clone %>% unique()
+allclone_i <- data.frame()
+for(cl in clone)
+{
+tryCatch({
+clone_neurons <- unlist(combined_data[combined_data$clone == cl & combined_data$Fru == "Y", "bodyid"])
+    #connection_table <- mcns_connection_table(clone_neurons, partners = "i", threshold = 2)
+    #saveRDS(connection_table, paste0("~/Downloads/MCNS_partners2/", cl, ".RDS"))
+    connection_table <- readRDS(paste0("~/Downloads/MCNS_partners2/", cl, ".RDS"))
+    colnames(connection_table)[colnames(connection_table) == "bodyid"] <- "query"
+    colnames(connection_table)[colnames(connection_table) == "partner"] <- "bodyid"
+    byclone_i <- merge(connection_table, combined_data[, c("bodyid", "clone", "Fru")], 
+                      by = "bodyid", 
+                      all.x = TRUE)
+  message(cl)
+  byclone_i$query_clone <- cl
+  allclone_i <- rbind(allclone_i, byclone_i)
+}, error = function(e) {
+    message(paste("Skipping sheet:", cl))})
+}
+```
+
+```{r}
+allclone_i_tot <- allclone_i %>%
+  group_by(query_clone) %>%
+  summarize(total_weight = sum(weight, na.rm = T)) %>%
+  ungroup()
+allclone_i_fru <- allclone_i %>% filter(!is.na(clone))
+allclone_i_weight <- allclone_i_fru %>%
+  group_by(query_clone, clone, Fru) %>%
+  summarize(weight = sum(weight, na.rm = TRUE)) %>%
+  ungroup()
+allclone_i_com <- allclone_i_weight %>%
+  left_join(allclone_i_tot, by = "query_clone")
+allclone_i_com$percent_weight <- 100*allclone_i_com$weight/allclone_i_com$total_weight
+allclone_i_com <- allclone_i_com %>% 
+  filter(Fru == "Y") %>%
+  arrange(desc(query_clone), desc(clone))
+```
