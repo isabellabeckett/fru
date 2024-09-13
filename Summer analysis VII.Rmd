@@ -1,0 +1,332 @@
+---
+title: "Summer analysis VII"
+author: "Bhumpanya Chaisrisawatsuk"
+date: "2024-09-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(malecns)
+library(dplyr)
+library(nat.nblast)
+library(fafbseg)
+library(tidyverse)
+library(coconatfly)
+library(ggplot2)
+library(arrow)
+library(igraph)
+library(visNetwork)
+```
+
+
+```{r}
+complete_hemilineages3 <- complete_hemilineages2 %>%
+  mutate(adjusted_ratio_weight = 2/(1+exp(1)^-(log(percent_dimorphic_output/percent_dimorphic_input)))) %>%
+    filter(!is.nan(adjusted_ratio_weight))
+```
+
+```{r}
+FW_complete_hemilineages3 <- FW_complete_hemilineages2 %>%
+  mutate(adjusted_ratio_weight = 2/(1+exp(1)^-(log(percent_dimorphic_output/percent_dimorphic_input)))) %>%
+  filter(!is.nan(adjusted_ratio_weight))
+```
+
+```{r}
+nrow_complete_hemilineages3 <- nrow(complete_hemilineages3)
+nrow_FW_complete_hemilineages3 <- nrow(FW_complete_hemilineages3)
+
+complete_hemilineages3_index <- complete_hemilineages3 %>%
+  arrange(adjusted_ratio_weight) %>%  
+  mutate(index = row_number()/nrow_complete_hemilineages3, Sex = "Male")  
+
+FW_complete_hemilineages3_index <- FW_complete_hemilineages3 %>%
+  arrange(adjusted_ratio_weight) %>%
+  mutate(index = row_number()/nrow_FW_complete_hemilineages3, Sex = "Female")
+
+combined_ratio <- bind_rows(complete_hemilineages3_index, FW_complete_hemilineages3_index)
+
+ggplot(combined_ratio, aes(x = index, y = adjusted_ratio_weight, color = Sex)) +
+  geom_point(shape = 1, size = 3, alpha = 0.05) +
+  geom_line(aes(group = Sex)) +
+  labs(x = "Index", 
+       y = "Adjusted ratio weight") +
+  theme_minimal() +
+  theme(axis.text = element_text(size = 15, family = "Avenir"), 
+        axis.title = element_text(size = 18, family = "Avenir"),
+        legend.text = element_text(size = 18, family = "Avenir"),
+        legend.title = element_text(size = 20, family = "Avenir"))
+```
+
+```{r}
+fru_hemilineages <- complete_hemilineages3 %>%
+  filter(Fru == "Y") 
+nrow_fru_hemilineages <- nrow(fru_hemilineages)
+fru_hemilineages_index <- fru_hemilineages %>%
+  arrange(adjusted_ratio_weight) %>%  
+  mutate(index = row_number()/nrow_fru_hemilineages, Sex = "Male")  
+
+FW_fru_hemilineages <- FW_complete_hemilineages3 %>%
+  filter(Fru == "Y")
+nrow_FW_fru_hemilineages <- nrow(FW_fru_hemilineages)
+FW_fru_hemilineages_index <- FW_fru_hemilineages %>%
+  arrange(adjusted_ratio_weight) %>%
+  mutate(index = row_number()/nrow_FW_fru_hemilineages, Sex = "Female")
+
+
+fru_ratio <- bind_rows(fru_hemilineages_index, FW_fru_hemilineages_index)
+
+ggplot(fru_ratio, aes(x = index, y = adjusted_ratio_weight, color = Sex)) +
+  geom_point(shape = 1, size = 3, alpha = 0.05) +
+  geom_line(aes(group = Sex)) +
+  labs(x = "Index", 
+       y = "Adjusted ratio weight") +
+  theme_minimal() +
+  theme(axis.text = element_text(size = 15, family = "Avenir"), 
+        axis.title = element_text(size = 18, family = "Avenir"),
+        legend.text = element_text(size = 18, family = "Avenir"),
+        legend.title = element_text(size = 20, family = "Avenir"))
+```
+
+```{r}
+nonfru_hemilineages <- complete_hemilineages3 %>%
+  filter(Fru == "N")
+nrow_nonfru_hemilineages <- nrow(nonfru_hemilineages)
+nonfru_hemilineages_index <- nonfru_hemilineages %>%
+  arrange(adjusted_ratio_weight) %>%  
+  mutate(index = row_number()/nrow_nonfru_hemilineages, Sex = "Male")  
+
+FW_nonfru_hemilineages <- FW_complete_hemilineages3 %>%
+  filter(Fru == "N")
+nrow_FW_nonfru_hemilineages <- nrow(FW_nonfru_hemilineages)
+FW_nonfru_hemilineages_index <- FW_nonfru_hemilineages %>%
+  arrange(adjusted_ratio_weight) %>%
+  mutate(index = row_number()/nrow_FW_nonfru_hemilineages, Sex = "Female")
+
+nonfru_ratio <- bind_rows(nonfru_hemilineages_index, FW_nonfru_hemilineages_index)
+
+ggplot(nonfru_ratio, aes(x = index, y = adjusted_ratio_weight, color = Sex)) +
+  geom_point(shape = 1, size = 3, alpha = 0.05) +
+  geom_line(aes(group = Sex)) +
+  labs(x = "Index", 
+       y = "Adjusted ratio weight") +
+  theme_minimal() +
+  theme(axis.text = element_text(size = 15, family = "Avenir"), 
+        axis.title = element_text(size = 18, family = "Avenir"),
+        legend.text = element_text(size = 18, family = "Avenir"),
+        legend.title = element_text(size = 20, family = "Avenir"))
+```
+
+```{r}
+complete_hemilineages3 <- complete_hemilineages3 %>%
+  filter(adjusted_ratio_weight != 0 & adjusted_ratio_weight != 2)
+FW_complete_hemilineages3 <- FW_complete_hemilineages3 %>%
+  filter(adjusted_ratio_weight != 0 & adjusted_ratio_weight != 2)
+```
+#rerun above
+
+```{r}
+FW_allclone_o_com2 <- FW_allclone_o_com %>% select(clone, query_clone, percent_weight)
+FW_allclone_i_com2 <- FW_allclone_i_com %>% select(clone, query_clone, percent_weight)
+FW_allclone_r_com <- full_join(FW_allclone_o_com2, FW_allclone_i_com2, by = c("clone", "query_clone"))
+FW_allclone_r_com <- FW_allclone_r_com %>%
+  mutate(across(everything(), ~ replace_na(., 0)))
+FW_allclone_r_com <- FW_allclone_r_com %>% 
+  mutate(ratio_weight = percent_weight.x/percent_weight.y)
+FW_allclone_r_com <- FW_allclone_r_com %>% 
+  mutate(adjusted_ratio_weight = 2/(1+exp(1)^-(log(percent_weight.x/percent_weight.y))))
+```
+
+```{r}
+clone <- unlist(FW_combined_data$clone)
+clone <- clone %>% unique()
+c = length(clone)
+FW_adj <- matrix(nrow = c, ncol = c)
+clone_short <- sub("^FW_", "", clone)
+colnames(FW_adj) = rownames(FW_adj) = clone_short
+for(ca in clone)
+{
+  for(cb in clone)
+  {
+    filtered_FW_allclone_r_com <- FW_allclone_r_com %>% filter(query_clone == ca)
+    percent_by_pair <- filtered_FW_allclone_r_com %>% filter(clone == cb) 
+    percent_by_pair <- unlist(percent_by_pair$adjusted_ratio_weight)
+    canum <- which(clone == ca)
+    cbnum <- which(clone == cb)
+    if(length(percent_by_pair) > 0 && !is.na(percent_by_pair))
+    {
+    FW_adj[canum, cbnum] <- percent_by_pair
+    }else{
+      FW_adj[canum, cbnum] <- 0
+    }
+  }
+}
+```
+
+```{r}
+# Create a graph object from the adjacency matrix
+network <- graph_from_adjacency_matrix(FW_adj, mode = "directed", weighted = TRUE, diag = F)
+
+# Extract edge weights from the graph
+edge_weights <- E(network)$weight
+
+# Scale the edge weights to determine the edge widths
+scaled_edge_widths <- edge_weights / max(edge_weights)
+
+# Set edge color with transparency (e.g., "black" with 50% transparency)
+transparent_edge_color <- adjustcolor("black", alpha.f = 0.5)
+
+node_categories <- c("olfactory", "auditory", "visual", "auditory", "olfactory", "olfactory", "auditory", "visual", "auditory", "olfactory", "auditory", "gustatory", "olfactory", "visual", "auditory", "auditory", "descending", "olfactory", "visual", "auditory", "olfactory", "auditory", "olfactory", "olfactory", "olfactory", "visual", "visual", "auditory", "auditory", "visual", "visual", "visual", "visual", "auditory", "auditory", "auditory", "auditory", "auditory", "visual", "auditory", "descending", "auditory", "auditory", "auditory", "auditory", "visual", "auditory", "auditory")
+
+# Map categories to colors
+category_colors <- c(
+  "olfactory" = "pink",
+  "auditory" = "lightblue1",
+  "visual" = "palegreen1",
+  "gustatory" = "violet",
+  "descending" = "bisque"
+)
+
+# Assign colors to nodes based on their category
+vertex_colours <- category_colors[node_categories]
+
+# Initialize an empty vector to store edge colors
+edge_colours <- rep(NA, length(E(network)))
+
+# Iterate over each edge and assign color based on direction
+for (i in seq_along(E(network))) {
+  edge <- E(network)[i]
+  source_node <- ends(network, edge)[1]  # Get the source node name
+  target_node <- ends(network, edge)[2]  # Get the target node name
+  
+  # Find the indices of the source and target nodes in the clone_short list
+  source_index <- match(source_node, clone_short)
+  target_index <- match(target_node, clone_short)
+  
+  # Compare indices and assign color
+  if (source_index < target_index) {
+    edge_colours[i] <- "blue"  # Source is higher, target is lower
+  } else {
+    edge_colours[i] <- "red"   # Source is lower, target is higher
+  }
+}
+
+# Plot the graph with custom edge widths and transparency
+plot(
+  network,
+  layout = layout_in_circle,
+  vertex.color = vertex_colours,
+  vertex.frame.color = "white",
+  vertex.size = 15,
+  vertex.label.family = "Avenir",
+  edge.width = scaled_edge_widths,                   
+  edge.color = adjustcolor(edge_colours, alpha.f = 0.5),               
+  edge.arrow.size = 0.1,
+  edge.arrow.mode = 2,
+  edge.curved = 0.1
+)
+```
+
+```{r}
+allclone_o_com2 <- allclone_o_com %>% select(clone, query_clone, percent_weight)
+allclone_i_com2 <- allclone_i_com %>% select(clone, query_clone, percent_weight)
+allclone_r_com <- full_join(allclone_o_com2, allclone_i_com2, by = c("clone", "query_clone"))
+allclone_r_com <- allclone_r_com %>%
+  mutate(across(everything(), ~ replace_na(., 0)))
+allclone_r_com <- allclone_r_com %>% 
+  mutate(ratio_weight = percent_weight.x/percent_weight.y)
+allclone_r_com <- allclone_r_com %>% 
+  mutate(adjusted_ratio_weight = 2/(1+exp(1)^-(log(percent_weight.x/percent_weight.y))))
+```
+
+```{r}
+clone <- unlist(combined_data$clone)
+clone <- clone %>% unique()
+c = length(clone)
+adj <- matrix(nrow = c, ncol = c)
+colnames(adj) = rownames(adj) = clone
+for(ca in clone)
+{
+  for(cb in clone)
+  {
+    filtered_allclone_r_com <- allclone_r_com %>% filter(query_clone == ca)
+    percent_by_pair <- filtered_allclone_r_com %>% filter(clone == cb) 
+    percent_by_pair <- unlist(percent_by_pair$adjusted_ratio_weight)
+    canum <- which(clone == ca)
+    cbnum <- which(clone == cb)
+    if(length(percent_by_pair) > 0 && !is.na(percent_by_pair))
+    {
+    adj[canum, cbnum] <- percent_by_pair
+    }else{
+    adj[canum, cbnum] <- 0
+    }
+  }
+}
+```
+
+```{r}
+# Create a graph object from the adjacency matrix
+network <- graph_from_adjacency_matrix(adj, mode = "directed", weighted = TRUE, diag = F)
+
+# Extract edge weights from the graph
+edge_weights <- E(network)$weight
+
+# Scale the edge weights to determine the edge widths
+scaled_edge_widths <- edge_weights / max(edge_weights)
+
+# Set edge color with transparency (e.g., "black" with 50% transparency)
+transparent_edge_color <- adjustcolor("black", alpha.f = 0.5)
+
+node_categories <- c("olfactory", "auditory", "visual", "auditory", "olfactory", "olfactory", "auditory", "visual", "auditory", "olfactory", "auditory", "gustatory", "olfactory", "visual", "auditory", "auditory", "descending", "olfactory", "visual", "auditory", "olfactory", "auditory", "olfactory", "olfactory", "olfactory", "visual", "visual", "auditory", "auditory", "visual", "visual", "visual", "visual", "auditory", "auditory", "auditory", "auditory", "auditory", "visual", "auditory", "descending", "auditory", "auditory", "auditory", "auditory", "visual", "auditory", "auditory")
+
+# Map categories to colors
+category_colors <- c(
+  "olfactory" = "pink",
+  "auditory" = "lightblue1",
+  "visual" = "palegreen1",
+  "gustatory" = "violet",
+  "descending" = "bisque"
+)
+
+# Assign colors to nodes based on their category
+vertex_colours <- category_colors[node_categories]
+
+# Initialize an empty vector to store edge colors
+edge_colours <- rep(NA, length(E(network)))
+
+# Iterate over each edge and assign color based on direction
+for (i in seq_along(E(network))) {
+  edge <- E(network)[i]
+  source_node <- ends(network, edge)[1]  # Get the source node name
+  target_node <- ends(network, edge)[2]  # Get the target node name
+  
+  # Find the indices of the source and target nodes in the clone_short list
+  source_index <- match(source_node, clone)
+  target_index <- match(target_node, clone)
+  
+  # Compare indices and assign color
+  if (source_index < target_index) {
+    edge_colours[i] <- "blue"  # Source is higher, target is lower
+  } else {
+    edge_colours[i] <- "red"   # Source is lower, target is higher
+  }
+}
+
+# Plot the graph with custom edge widths and transparency
+plot(
+  network,
+  layout = layout_in_circle,
+  vertex.color = vertex_colours,
+  vertex.frame.color = "white",
+  vertex.size = 15,
+  vertex.label.family = "Avenir",
+  edge.width = scaled_edge_widths,                   
+  edge.color = adjustcolor(edge_colours, alpha.f = 0.5),               
+  edge.arrow.size = 0.1,
+  edge.arrow.mode = 2,
+  edge.curved = 0.1
+)
+```
