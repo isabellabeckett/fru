@@ -191,7 +191,7 @@ for(i in s) {
 ```
 
 ```{r}
-FWpartner_aDT_b <- data.frame()
+FWpartner_spec <- data.frame()
 subset <- FW_complete_YandN[FW_complete_YandN$clone == "FW_aSP-i" & FW_complete_YandN$Fru == "Y", "root_id"]
 subset <- unlist(subset)
 s <- length(subset)
@@ -203,24 +203,24 @@ for(i in 1:s)
   FW_temp_clone <- merge(partners, FW_combined_data[, c("root_id", "clone")], 
                       by = "root_id", 
                       all.x = TRUE)
-  FWpartner_aDT_b <- rbind(FWpartner_aDT_b, FW_temp_clone)
+  FWpartner_spec <- rbind(FWpartner_spec, FW_temp_clone)
 }
 ```
 
 ```{r}
-FW_aDT_b_tot <- sum(FWpartner_aDT_b$weight)
-FWpartner2_aDT_b <- FWpartner_aDT_b %>% filter(!is.na(clone))
-FW_aDT_b_partner_weight <- FWpartner2_aDT_b %>%
+FW_spec_tot <- sum(FWpartner_spec$weight)
+FWpartner2_spec <- FWpartner_spec %>% filter(!is.na(clone))
+FW_spec_partner_weight <- FWpartner2_spec %>%
   group_by(clone) %>%
   summarize(total_weight = sum(weight, na.rm = TRUE))
-FW_aDT_b_partner_weight$percent_weight <- 100*FW_aDT_b_partner_weight$total_weight/FW_aDT_b_tot
-FW_aDT_b_partner_weight <- FW_aDT_b_partner_weight %>% arrange(desc(percent_weight))
-FW_aDT_b_partner_weight$clone <- factor(FW_aDT_b_partner_weight$clone, 
-                                         levels = FW_aDT_b_partner_weight$clone)
+FW_spec_partner_weight$percent_weight <- 100*FW_spec_partner_weight$total_weight/FW_spec_tot
+FW_spec_partner_weight <- FW_spec_partner_weight %>% arrange(desc(percent_weight))
+FW_spec_partner_weight$clone <- factor(FW_spec_partner_weight$clone, 
+                                         levels = FW_spec_partner_weight$clone)
 ```
 
 ```{r}
-ggplot(FW_aDT_b_partner_weight, aes(x = clone, y = percent_weight, fill = clone)) +
+ggplot(FW_spec_partner_weight, aes(x = clone, y = percent_weight, fill = clone)) +
   geom_bar(stat = "identity") + 
   labs(x = "Clone", y = "Percent Weight", title = "Percent Weight by Clone") +
   theme_minimal() +
@@ -234,7 +234,7 @@ ggplot(FW_aDT_b_partner_weight, aes(x = clone, y = percent_weight, fill = clone)
 ```
 
 ```{r}
-partner_aDT_c <- data.frame()
+partner_spec <- data.frame()
 clone_neurons <- unlist(combined_data[combined_data$clone == "aSP-i" & combined_data$Fru == "Y", "bodyid"])
   connection_table <- mcns_connection_table(clone_neurons, partners = "o", threshold = 2)
   colnames(connection_table)[colnames(connection_table) == "bodyid"] <- "query"
@@ -242,25 +242,25 @@ clone_neurons <- unlist(combined_data[combined_data$clone == "aSP-i" & combined_
   clone_conn <- merge(connection_table, complete_hemilineages[, c("bodyid", "clone", "Fru")], 
                       by = "bodyid", 
                       all.x = TRUE)
-  partner_aDT_c <- rbind(partner_aDT_c, clone_conn)
+  partner_spec <- rbind(partner_spec, clone_conn)
 ```
 
 ```{r}
-aDT_c_tot <- sum(partner_aDT_c$weight)
-partner2_aDT_c <- partner_aDT_c %>% filter(!is.na(clone))
-aDT_c_partner_weight <- partner2_aDT_c %>%
+spec_tot <- sum(partner_spec$weight)
+partner2_spec <- partner_spec %>% filter(!is.na(clone))
+spec_partner_weight <- partner2_spec %>%
   group_by(clone, Fru) %>%
   summarize(total_weight = sum(weight, na.rm = TRUE))
-aDT_c_partner_weight$percent_weight <- 100*aDT_c_partner_weight$total_weight/aDT_c_tot
-aDT_c_partner_weight <- aDT_c_partner_weight %>%
+spec_partner_weight$percent_weight <- 100*spec_partner_weight$total_weight/spec_tot
+spec_partner_weight <- spec_partner_weight %>%
   filter(Fru == "Y") %>%
   arrange(desc(percent_weight))
-aDT_c_partner_weight$clone <- factor(aDT_c_partner_weight$clone, 
-                                         levels = aDT_c_partner_weight$clone)
+spec_partner_weight$clone <- factor(spec_partner_weight$clone, 
+                                         levels = spec_partner_weight$clone)
 ```
 
 ```{r}
-ggplot(aDT_c_partner_weight, aes(x = clone, y = percent_weight, fill = clone)) +
+ggplot(spec_partner_weight, aes(x = clone, y = percent_weight, fill = clone)) +
   geom_bar(stat = "identity") + 
   labs(x = "Clone", y = "Percent Weight", title = "Percent Weight by Clone") +
   theme_minimal() +

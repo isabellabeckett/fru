@@ -169,7 +169,7 @@ for(i in 1:s)
 ```{r}
 #s <- length(to_do)
 FW_neurons <- unlist(`FWsheet_FW_aSP-i`$root_id)
-for(i in FW_neurons)
+for(i in "720575940628653199")
 {
   message(paste("Processing neuron", i))
   FW_partners <- tryCatch({

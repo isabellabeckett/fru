@@ -374,7 +374,7 @@ ggplot(data = complete_hemilineages2, aes(x = clone, y = percent_dimorphic_outpu
 ```
 
 ```{r}
-#mba <- mcns_body_annotations()
+mba <- mcns_body_annotations()
 all.hemilineages <- mba %>% filter(!is.na(hemilineage) & hemilineage != "no_lineage" & hemilineage != "TBD")
 countdf <- all.hemilineages %>% count(hemilineage) %>% filter(hemilineage != "putative_primary" & hemilineage != "primary" & !str_detect(hemilineage, "^MB")) %>% mutate(hemilineage = fct_reorder(hemilineage, n, .desc = TRUE))
 ggplot(countdf, aes(x = n, y = hemilineage), fill = hemilineage) +
@@ -387,7 +387,7 @@ ggplot(countdf, aes(x = n, y = hemilineage), fill = hemilineage) +
 ```{r}
 out58449 <- mcns_connection_table(21162, partners = "o", summary = TRUE)
 colnames(out58449)[1] <- "bodyid"
-partner58449 <- merge(out58449, combined_data[, c("bodyid", "clone", "hemilineage/AOTU00")], 
+partner58449 <- merge(out58449, combined_data[, c("bodyid", "clone", "hemilineage")], 
                       by = "bodyid", 
                       all.x = TRUE)
 ```

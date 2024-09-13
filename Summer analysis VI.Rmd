@@ -65,6 +65,8 @@ FW_allclone_o_com <- FW_allclone_o_com %>%
 ```
 
 ```{r}
+clone <- unlist(FW_combined_data$clone)
+clone <- clone %>% unique()
 c = length(clone)
 FW_adj <- matrix(nrow = c, ncol = c)
 clone_short <- sub("^FW_", "", clone)
@@ -89,6 +91,9 @@ for(ca in clone)
 ```
 
 ```{r}
+png(file= "~/Documents/Greg Jefferis' lab/fru/network_female_o_frutofru.png",
+width=3000, height=3000)
+
 # Create a graph object from the adjacency matrix
 network <- graph_from_adjacency_matrix(FW_adj, mode = "directed", weighted = TRUE, diag = F)
 
@@ -139,11 +144,12 @@ for (i in seq_along(E(network))) {
 # Plot the graph with custom edge widths and transparency
 plot(
   network,
-  layout = layout_with_fr,
+  layout = layout_in_circle,
   vertex.color = vertex_colours,
   vertex.frame.color = "white",
   vertex.size = 15,
   vertex.label.family = "Avenir",
+  vertex.label.cex = 5,
   edge.width = scaled_edge_widths,                   
   edge.color = adjustcolor(edge_colours, alpha.f = 0.5),               
   edge.arrow.size = 0.1,
@@ -151,6 +157,7 @@ plot(
   edge.curved = 0.1
 )
 
+dev.off()
 ```
 
 ```{r}
@@ -174,9 +181,6 @@ plot(
   edge.curved = 0.1
 )
 ```
-
-
-
 
 ```{r}
 clone <- unlist(FW_combined_data$clone)
@@ -245,6 +249,9 @@ for(ca in clone)
 ```
 
 ```{r}
+png(file= "~/Documents/Greg Jefferis' lab/fru/network_female_i_frutofru.png",
+width=3000, height=3000)
+
 # Create a graph object from the adjacency matrix
 network2 <- graph_from_adjacency_matrix(FW_adj2, mode = "directed", weighted = TRUE, diag = FALSE)
 
@@ -252,13 +259,14 @@ network2 <- graph_from_adjacency_matrix(FW_adj2, mode = "directed", weighted = T
 edge_weights <- E(network2)$weight
 
 # Scale the edge weights to determine the edge widths
-scaled_edge_widths <- edge_weights / max(edge_weights) * 20  # Adjust the multiplier for more differentiation
+scaled_edge_widths <- edge_weights / max(edge_weights)*20  # Adjust the multiplier for more differentiation
 
 # Set edge color with transparency (e.g., "black" with 50% transparency)
 transparent_edge_color <- adjustcolor("black", alpha.f = 0.5)
 
 node_categories <- c("olfactory", "auditory", "visual", "auditory", "olfactory", "olfactory", "auditory", "visual", "auditory", "auditory", "gustatory", "olfactory", "visual", "auditory", "auditory", "descending", "olfactory", "visual", "auditory", "olfactory", "auditory", "olfactory", "olfactory", "olfactory", "visual", "visual", "auditory", "auditory", "visual", "visual", "visual", "visual", "auditory", "auditory", "auditory", "auditory", "auditory", "visual", "auditory", "descending", "auditory", "auditory", "auditory", "auditory", "visual", "auditory", "auditory")
 
+# Map categories to colors
 # Map categories to colors
 category_colors <- c(
   "olfactory" = "pink",
@@ -269,20 +277,46 @@ category_colors <- c(
 )
 
 # Assign colors to nodes based on their category
-vertex_colors <- category_colors[node_categories]
+vertex_colours <- category_colors[node_categories]
+
+# Initialize an empty vector to store edge colors
+edge_colours <- rep(NA, length(E(network)))
+
+# Iterate over each edge and assign color based on direction
+for (i in seq_along(E(network))) {
+  edge <- E(network)[i]
+  source_node <- ends(network, edge)[1]  # Get the source node name
+  target_node <- ends(network, edge)[2]  # Get the target node name
+  
+  # Find the indices of the source and target nodes in the clone_short list
+  source_index <- match(source_node, clone_short)
+  target_index <- match(target_node, clone_short)
+  
+  # Compare indices and assign color
+  if (source_index < target_index) {
+    edge_colours[i] <- "blue"  # Source is higher, target is lower
+  } else {
+    edge_colours[i] <- "red"   # Source is lower, target is higher
+  }
+}
 
 # Plot the graph with custom edge widths and transparency
 plot(
-  network2,
-  vertex.color = vertex_colors,
+  network,
+  layout = layout_in_circle,
+  vertex.color = vertex_colours,
   vertex.frame.color = "white",
   vertex.size = 15,
   vertex.label.family = "Avenir",
-  edge.width = scaled_edge_widths,                   # Set edge width based on scaled weights
-  edge.color = transparent_edge_color,               # Set edge color with transparency
+  vertex.label.cex = 5,
+  edge.width = scaled_edge_widths,                   
+  edge.color = adjustcolor(edge_colours, alpha.f = 0.5),               
   edge.arrow.size = 0.1,
+  edge.arrow.mode = 2,
   edge.curved = 0.1
 )
+
+dev.off()
 ```
 
 ```{r}
@@ -357,9 +391,10 @@ allclone_o_com <- allclone_o_com %>%
 ```{r}
 clone <- clone[clone != "pSG-a"]
 clone <- clone[clone != "aIP-f"]
+clone <- clone[clone != "pSP-e"]
 c = length(clone)
-FW_adj3 <- matrix(nrow = c, ncol = c)
-colnames(FW_adj3) = rownames(FW_adj3) = clone
+MCNS_adj <- matrix(nrow = c, ncol = c)
+colnames(MCNS_adj) = rownames(MCNS_adj) = clone
 for(ca in clone)
 {
   for(cb in clone)
@@ -371,20 +406,23 @@ for(ca in clone)
     cbnum <- which(clone == cb)
     if(length(percent_by_pair) > 0 && !is.na(percent_by_pair))
     {
-    FW_adj3[canum, cbnum] <- percent_by_pair
+    MCNS_adj[canum, cbnum] <- percent_by_pair
     }else{
-      FW_adj3[canum, cbnum] <- 0
+    MCNS_adj[canum, cbnum] <- 0
     }
   }
 }
 ```
 
 ```{r}
-network3 <- graph_from_adjacency_matrix(FW_adj3, mode = "directed", weighted = TRUE, diag = FALSE)
+png(file= "~/Documents/Greg Jefferis' lab/fru/network_male_o_frutofru.png",
+width=3000, height=3000)
+
+network3 <- graph_from_adjacency_matrix(MCNS_adj, mode = "directed", weighted = TRUE, diag = FALSE)
 
 edge_weights <- E(network3)$weight
 
-scaled_edge_widths <- edge_weights / max(edge_weights) *10
+scaled_edge_widths <- edge_weights / max(edge_weights) *20
 
 node_categories <- c("olfactory", "gustatory", "visual", "auditory", "olfactory", "olfactory", "auditory", "visual", "auditory", "olfactory","auditory", "gustatory", "olfactory", "auditory", "auditory", "descending", "olfactory", "visual", "auditory", "olfactory", "auditory", "olfactory", "olfactory", "olfactory", "visual", "visual", "auditory", "auditory", "visual", "descending", "visual", "visual", "visual", "auditory", "auditory", "auditory", "auditory", "auditory", "visual", "descending", "auditory", "auditory", "auditory", "auditory", "auditory", "auditory", "visual", "auditory")
 
@@ -399,15 +437,15 @@ category_colors <- c(
 
 vertex_colours <- category_colors[node_categories]
 
-edge_colours <- rep(NA, length(E(network)))
+edge_colours <- rep(NA, length(E(network3)))
 
-for (i in seq_along(E(network))) {
-  edge <- E(network)[i]
-  source_node <- ends(network, edge)[1]  
-  target_node <- ends(network, edge)[2]  
+for (i in seq_along(E(network3))) {
+  edge <- E(network3)[i]
+  source_node <- ends(network3, edge)[1]  
+  target_node <- ends(network3, edge)[2]  
   
-  source_index <- match(source_node, clone_short)
-  target_index <- match(target_node, clone_short)
+  source_index <- match(source_node, clone)
+  target_index <- match(target_node, clone)
 
   if (source_index < target_index) {
     edge_colours[i] <- "blue"  
@@ -418,16 +456,19 @@ for (i in seq_along(E(network))) {
 
 plot(
   network3,
-  layout = layout_with_dh,
+  layout = layout_in_circle,
   vertex.color = vertex_colours,
   vertex.frame.color = "white",
   vertex.size = 15,
   vertex.label.family = "Avenir",
+  vertex.label.cex = 5,
   edge.width = scaled_edge_widths,                  
   edge.color = adjustcolor(edge_colours, alpha.f = 0.5),             
   edge.arrow.size = 0.1,
   edge.curved = 0.2
 )
+
+dev.off()
 ```
 
 ```{r}
@@ -470,4 +511,87 @@ allclone_i_com$percent_weight <- 100*allclone_i_com$weight/allclone_i_com$total_
 allclone_i_com <- allclone_i_com %>% 
   filter(Fru == "Y") %>%
   arrange(desc(query_clone), desc(clone))
+```
+
+```{r}
+clone <- clone[clone != "pSG-a"]
+clone <- clone[clone != "aIP-f"]
+clone <- clone[clone != "pSP-e"]
+c = length(clone)
+MCNS_adj2 <- matrix(nrow = c, ncol = c)
+colnames(MCNS_adj2) = rownames(MCNS_adj2) = clone
+for(ca in clone)
+{
+  for(cb in clone)
+  {
+    filtered_allclone_i_com <- allclone_i_com %>% filter(query_clone == ca)
+    percent_by_pair <- filtered_allclone_i_com %>% filter(clone == cb) 
+    percent_by_pair <- unlist(percent_by_pair$percent_weight)
+    canum <- which(clone == ca)
+    cbnum <- which(clone == cb)
+    if(length(percent_by_pair) > 0 && !is.na(percent_by_pair))
+    {
+    MCNS_adj2[canum, cbnum] <- percent_by_pair
+    }else{
+      MCNS_adj2[canum, cbnum] <- 0
+    }
+  }
+}
+```
+
+```{r}
+png(file= "~/Documents/Greg Jefferis' lab/fru/network_male_i_frutofru_scheme.png",
+width=3000, height=3000)
+
+network3 <- graph_from_adjacency_matrix(MCNS_adj2, mode = "directed", weighted = TRUE, diag = FALSE)
+
+edge_weights <- E(network3)$weight
+
+scaled_edge_widths <- edge_weights / max(edge_weights) *20
+
+node_categories <- c("olfactory", "gustatory", "visual", "auditory", "olfactory", "olfactory", "auditory", "visual", "auditory", "olfactory","auditory", "gustatory", "olfactory", "auditory", "auditory", "descending", "olfactory", "visual", "auditory", "olfactory", "auditory", "olfactory", "olfactory", "olfactory", "visual", "visual", "auditory", "auditory", "visual", "descending", "visual", "visual", "visual", "auditory", "auditory", "auditory", "auditory", "auditory", "visual", "descending", "auditory", "auditory", "auditory", "auditory", "auditory", "auditory", "visual", "auditory")
+
+# Map categories to colors
+category_colors <- c(
+  "olfactory" = "pink",
+  "auditory" = "lightblue1",
+  "visual" = "palegreen1",
+  "gustatory" = "violet",
+  "descending" = "bisque"
+)
+
+vertex_colours <- category_colors[node_categories]
+
+edge_colours <- rep(NA, length(E(network3)))
+
+for (i in seq_along(E(network3))) {
+  edge <- E(network3)[i]
+  source_node <- ends(network3, edge)[1]  
+  target_node <- ends(network3, edge)[2]  
+  
+  source_index <- match(source_node, clone)
+  target_index <- match(target_node, clone)
+
+  if (source_index < target_index) {
+    edge_colours[i] <- "blue"  
+  } else {
+    edge_colours[i] <- "red" 
+  }
+}
+
+plot(
+  network3,
+  layout = layout_with_fr,
+  vertex.color = vertex_colours,
+  vertex.frame.color = "white",
+  vertex.size = 15,
+  vertex.label.family = "Avenir",
+  vertex.label.cex = 5,
+  edge.width = scaled_edge_widths,                  
+  edge.color = adjustcolor(edge_colours, alpha.f = 0.5),             
+  edge.arrow.size = 0.1,
+  edge.curved = 0.2
+)
+
+dev.off()
 ```

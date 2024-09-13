@@ -1,0 +1,78 @@
+---
+title: "Summer Analysis VIII"
+author: "Bhumpanya Chaisrisawatsuk"
+date: "2024-09-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+mba_filtered <- mba %>% 
+  #filter(class == "central") %>%
+  select(bodyid, hemilineage, type, class) %>%
+  mutate(bodyid = as.character(bodyid)) %>%
+  left_join(complete_hemilineages, by = "bodyid") %>%
+  select(bodyid, hemilineage.x, Fru, clone, class) %>%
+  mutate(Fru = ifelse(is.na(Fru),"N", Fru))
+```
+
+```{r}
+mba_fru <- mba_filtered %>%
+  filter(Fru == "Y") %>%
+  select(bodyid) %>%
+  pull()
+mba_fru <- mba_fru[!duplicated(mba_fru)]
+connection_table_fru_in <- mcns_connection_table(mba_fru, partners = "inputs", threshold = 2)
+connection_table_fru_in2 <- connection_table_fru_in %>% 
+  group_by(bodyid) %>%
+  summarise(weight = sum(weight))
+connection_table_fru_out <- mcns_connection_table(mba_fru, partners = "outputs", threshold = 2)
+connection_table_fru_out2 <- connection_table_fru_out %>% 
+  group_by(bodyid) %>%
+  summarise(weight = sum(weight))
+connection_table_fru <- left_join(connection_table_fru_in2, connection_table_fru_out2, by = "bodyid")
+
+connection_table_fru$total <- connection_table_fru$weight.x + connection_table_fru$weight.y
+
+connection_table_fru <- connection_table_fru %>% rename("weight_in" = weight.x, "weight_out" = weight.y) %>% left_join(clone_Y_in, by = "bodyid")
+
+connection_table_fru <- connection_table_fru %>% 
+  rename("weight_fru_in" = weight) %>% 
+  select(bodyid, total, weight_fru_in)
+
+connection_table_fru <- connection_table_fru %>% 
+  left_join(clone_Y_out, by = "bodyid") %>% 
+  rename("weight_fru_out" = weight) %>% 
+  select(bodyid, total, weight_fru_in, weight_fru_out)
+
+connection_table_fru$fru_total <- connection_table_fru$weight_fru_in + connection_table_fru$weight_fru_out
+
+connection_table_fru$fru_ratio <- connection_table_fru$fru_total/connection_table_fru$total
+```
+
+```{r}
+count_clones <- mba_filtered %>% 
+  filter(Fru =="Y") %>%
+  group_by(clone) %>%
+  count()
+sum_count_clones <- sum(count_clones$n)
+```
+
+```{r}
+mba_nonfru <- mba_filtered %>%
+  filter(Fru == "N")
+mba_nonfru <- mba_nonfru %>%
+  filter(class == "central")
+random_mba_nonfru <- mba_nonfru %>% 
+  sample_n(sum_count_clones) %>%
+  select(bodyid) %>%
+  pull()
+connection_table_nonfru <- mcns_connection_table(random_mba_nonfru)
+```
+
+
+
+
