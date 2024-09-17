@@ -308,18 +308,18 @@ mean_values_i <- complete_hemilineages2 %>%
 complete_hemilineages2 <- complete_hemilineages2 %>%
   arrange(Fru)
 gg <- ggplot(data = complete_hemilineages2, aes(x = clone, y = percent_dimorphic_input, color = Fru, shape = Fru, 
-                                                text = paste("bodyid:", bodyid))) +  # Adding bodyid info as tooltip
+                                          text = paste("bodyid:", bodyid))) +  # Adding bodyid info as tooltip
   geom_jitter(width = 0.2, size = 3, stroke = 1, fill = NA) +  # Plot the bodyid values with unfilled dots
   geom_point(data = mean_values_i, aes(x = clone, y = mean_percent_dimorphic_input, shape = Fru), 
              size = 5, color = "black", fill = NA, stroke = 1.5, show.legend = FALSE) +
-  scale_shape_manual(values = c("Y" = 1, "N" = 0)) +  # Dot (16) for Fru == "Y", Square (15) for Fru == "N"
+  scale_shape_manual(values = c("Y" = 1, "N" = 0)) +  # Dot (1) for Fru == "Y", Square (0) for Fru == "N"
   scale_color_manual(values = c("Y" = "orange2", "N" = "darkorchid2"))+
   labs(
     x = "Clone",
-    y = "Percent Dimorphic Input",
-    title = "Percent Dimorphic Input by Clone and Fru",
-    color = "Clone",
-    shape = "Fru"
+    y = "Percent Fru+ input",
+    title = "Percent Fru+ input by clone and Fru expression",
+    color = "Fru",  # Label for combined legend
+    shape = "Fru"   # Label for combined legend
   ) +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1), 
@@ -329,7 +329,7 @@ gg <- ggplot(data = complete_hemilineages2, aes(x = clone, y = percent_dimorphic
         plot.title = element_text(size = 20, face = "italic", family = "Avenir"), # Adjust plot title size
         legend.text = element_text(size = 18, family = "Avenir"),
         legend.title = element_text(size = 20, family = "Avenir")
-        )
+  )
 
 gg
 ```
@@ -350,27 +350,31 @@ mean_values_o <- complete_hemilineages2 %>%
 ```{r}
 complete_hemilineages2 <- complete_hemilineages2 %>%
   arrange(Fru)
-ggplot(data = complete_hemilineages2, aes(x = clone, y = percent_dimorphic_output, color = Fru, shape = Fru)) +
-  geom_jitter(width = 0.2, size = 3, stroke = 1.2, fill = NA) +  # Plot the bodyid values with color and shape
-  geom_point(data = mean_values_o, aes(x = clone, y = mean_percent_dimorphic_output, shape = Fru), size = 5, color = "black",stroke = 1.5, show.legend = FALSE) +  # Plot the mean values
-  scale_shape_manual(values = c("Y" = 1, "N" = 0)) + 
-   scale_color_manual(values = c("Y" = "orange2", "N" = "darkorchid2"))+# Dot (16) for Fru == "Y", Square (15) for Fru == "N"
+gg <- ggplot(data = complete_hemilineages2, aes(x = clone, y = percent_dimorphic_output, color = Fru, shape = Fru, 
+                                          text = paste("bodyid:", bodyid))) +  # Adding bodyid info as tooltip
+  geom_jitter(width = 0.2, size = 3, stroke = 1, fill = NA) +  # Plot the bodyid values with unfilled dots
+  geom_point(data = mean_values_o, aes(x = clone, y = mean_percent_dimorphic_output, shape = Fru), 
+             size = 5, color = "black", fill = NA, stroke = 1.5, show.legend = FALSE) +
+  scale_shape_manual(values = c("Y" = 1, "N" = 0)) +  # Dot (1) for Fru == "Y", Square (0) for Fru == "N"
+  scale_color_manual(values = c("Y" = "orange2", "N" = "darkorchid2"))+
   labs(
     x = "Clone",
-    y = "Percent Dimorphic Output",
-    title = "Percent Dimorphic Output by Clone and Fru",
-    color = "Clone",
-    shape = "Fru"
+    y = "Percent Fru+ output",
+    title = "Percent Fru+ output by clone and Fru expression",
+    color = "Fru",  # Label for combined legend
+    shape = "Fru"   # Label for combined legend
   ) +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1),
-            axis.text = element_text(size = 15, family = "Avenir"),  # Adjust axis text size
-    axis.title.x = element_text(size = 18, family = "Avenir", margin = margin(t=20)), # Adjust axis title size
-    axis.title.y = element_text(size = 18, family = "Avenir"),
-    plot.title = element_text(size = 20, face = "italic", family = "Avenir"), # Adjust plot title size
-    legend.text = element_text(size = 18, family = "Avenir"),
-    legend.title = element_text(size = 20, family = "Avenir")
-    )
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1), 
+        axis.text = element_text(size = 15, family = "Avenir"),  # Adjust axis text size
+        axis.title.x = element_text(size = 18, family = "Avenir", margin = margin(t=20)), # Adjust axis title size
+        axis.title.y = element_text(size = 18, family = "Avenir"),
+        plot.title = element_text(size = 20, face = "italic", family = "Avenir"), # Adjust plot title size
+        legend.text = element_text(size = 18, family = "Avenir"),
+        legend.title = element_text(size = 20, family = "Avenir")
+  )
+
+gg
 ```
 
 ```{r}

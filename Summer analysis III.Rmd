@@ -241,15 +241,17 @@ ggplot(df_long, aes(x = Clones, y = value, fill = type)) +
 ```
 
 ```{r}
-found <- sum(summary$`Found?` == "Y")
-entire_lineage <- sum(summary$`Entire lineage checked?` == "Y", na.rm = TRUE)
-  level <- c("Entire lineage checked?", "Found?") 
-  count <- c(entire_lineage, found) 
-  no_count <- c(58-entire_lineage, 58-found)
+MCNS_found <- sum(summary$`Found?` == "Y")
+MCNS_entire_lineage <- sum(summary$`Entire lineage checked?` == "Y", na.rm = TRUE)
+FW_found <- sum(summary$`Found in FW?` == "Y")
+FW_entire_lineage <- sum(summary$`Manual FW?` == "Y")
+  level <- c("MCNS completed?", "MCNS Found?", "FW completed?", "FW Found?") 
+  count <- c(MCNS_entire_lineage, MCNS_found, FW_entire_lineage, FW_found) 
+  no_count <- c(58-MCNS_entire_lineage, 58-MCNS_found, 58-FW_entire_lineage, 58-FW_found)
 completeness <- data.frame(level, count, no_count) 
 df_long <- completeness %>%
   pivot_longer(cols = c(no_count, count), names_to = "type", values_to = "value") %>%
-  mutate(level = factor(level, levels = c("Found?", "Entire lineage checked?"))) %>%
+  mutate(level = factor(level, levels = c("MCNS completed?", "MCNS Found?", "FW completed?", "FW Found?"))) %>%
   mutate(type = factor(type, levels = c("no_count", "count")))
 ggplot(df_long, aes(x = level, y = value, fill = type)) +
   geom_bar(stat = "identity") +

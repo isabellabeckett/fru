@@ -10,6 +10,19 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r}
+library(googlesheets4)
+library(malecns)
+library(dplyr)
+library(nat.nblast)
+library(fafbseg)
+library(tidyverse)
+library(coconatfly)
+library(ggplot2)
+library(arrow)
+```
+
+
+```{r}
 mba_filtered <- mba %>% 
   #filter(class == "central") %>%
   select(bodyid, hemilineage, type, class) %>%
@@ -20,16 +33,22 @@ mba_filtered <- mba %>%
 ```
 
 ```{r}
+fragments <- c("497396","137328")
 mba_fru <- mba_filtered %>%
-  filter(Fru == "Y") %>%
-  select(bodyid) %>%
+  filter(Fru == "Y" & !bodyid %in% fragments) %>%
+  distinct(bodyid) %>%
   pull()
+
 mba_fru <- mba_fru[!duplicated(mba_fru)]
 connection_table_fru_in <- mcns_connection_table(mba_fru, partners = "inputs", threshold = 2)
+connection_table_fru_in$dimorphic_partner = NA
+connection_table_fru_in$dimorphic_partner = ifelse(connection_table_fru_in$partner %in% mba_fru, "Y", "N")
 connection_table_fru_in2 <- connection_table_fru_in %>% 
   group_by(bodyid) %>%
   summarise(weight = sum(weight))
 connection_table_fru_out <- mcns_connection_table(mba_fru, partners = "outputs", threshold = 2)
+connection_table_fru_out $dimorphic_partner = NA
+connection_table_fru_out $dimorphic_partner = ifelse(connection_table_fru_out$partner %in% mba_fru, "Y", "N")
 connection_table_fru_out2 <- connection_table_fru_out %>% 
   group_by(bodyid) %>%
   summarise(weight = sum(weight))
@@ -37,25 +56,94 @@ connection_table_fru <- left_join(connection_table_fru_in2, connection_table_fru
 
 connection_table_fru$total <- connection_table_fru$weight.x + connection_table_fru$weight.y
 
-connection_table_fru <- connection_table_fru %>% rename("weight_in" = weight.x, "weight_out" = weight.y) %>% left_join(clone_Y_in, by = "bodyid")
+connection_table_fru <- connection_table_fru %>% rename("weight_in" = weight.x, "weight_out" = weight.y)
 
-connection_table_fru <- connection_table_fru %>% 
-  rename("weight_fru_in" = weight) %>% 
-  select(bodyid, total, weight_fru_in)
+clone_in_fru <- connection_table_fru_in %>% 
+  filter(dimorphic_partner == "Y") %>%
+  group_by(bodyid) %>%
+  summarise(fru_weight_in = sum(weight))
 
-connection_table_fru <- connection_table_fru %>% 
-  left_join(clone_Y_out, by = "bodyid") %>% 
-  rename("weight_fru_out" = weight) %>% 
-  select(bodyid, total, weight_fru_in, weight_fru_out)
+clone_out_fru <- connection_table_fru_out %>% 
+  filter(dimorphic_partner == "Y") %>%
+  group_by(bodyid) %>%
+  summarise(fru_weight_out = sum(weight))
 
-connection_table_fru$fru_total <- connection_table_fru$weight_fru_in + connection_table_fru$weight_fru_out
+connection_table_fru <- left_join(connection_table_fru, clone_in_fru, by = "bodyid")
+connection_table_fru <- left_join(connection_table_fru, clone_out_fru, by = "bodyid")
+connection_table_fru$fru_weight_in <- ifelse(is.na(connection_table_fru$fru_weight_in), 0, connection_table_fru$fru_weight_in)
+connection_table_fru$fru_weight_out <- ifelse(is.na(connection_table_fru$fru_weight_out), 0, connection_table_fru$fru_weight_out)
+
+connection_table_fru$fru_total <- connection_table_fru$fru_weight_in + connection_table_fru$fru_weight_out
 
 connection_table_fru$fru_ratio <- connection_table_fru$fru_total/connection_table_fru$total
+
+mba_filtered$bodyid <- as.integer(mba_filtered$bodyid)
+connection_table_fru1 <- connection_table_fru %>%
+  left_join(mba_filtered, by = "bodyid") %>%
+  select(bodyid, clone, fru_ratio)
 ```
 
 ```{r}
-count_clones <- mba_filtered %>% 
-  filter(Fru =="Y") %>%
+connection_table_fru2 <- connection_table_fru1 %>%
+  group_by(clone) %>%
+  mutate(mean_ratio = mean(fru_ratio)) %>%
+  select(clone, mean_ratio) %>%
+  distinct(clone, mean_ratio)
+```
+
+```{r}
+pseudoclone_in <- mcns_connection_table(random_mba_nonfru, partners = "inputs", threshold = 2)
+pseudoclone_in$dimorphic_partner = NA
+pseudoclone_in$dimorphic_partner = ifelse(pseudoclone_in$partner %in% mba_fru, "Y", "N")
+
+pseudoclone_out <- mcns_connection_table(random_mba_nonfru, partners = "outputs", threshold = 2)
+pseudoclone_out$dimorphic_partner = NA
+pseudoclone_out$dimorphic_partner = ifelse(pseudoclone_out$partner %in% mba_fru, "Y", "N")
+
+pseudoclone_in2 <- pseudoclone_in %>% 
+  group_by(bodyid) %>%
+  summarise(weight = sum(weight))
+
+pseudoclone_out2 <- pseudoclone_out %>% 
+  group_by(bodyid) %>%
+  summarise(weight = sum(weight))
+
+connection_table_nonfru <- left_join(pseudoclone_in2, pseudoclone_out2, by = "bodyid")
+
+connection_table_nonfru$total <- connection_table_nonfru$weight.x + connection_table_nonfru$weight.y
+
+connection_table_nonfru <- connection_table_nonfru %>% rename("weight_in" = weight.x, "weight_out" = weight.y)
+
+pseudoclone_in_fru <- pseudoclone_in %>% 
+  filter(dimorphic_partner == "Y") %>%
+  group_by(bodyid) %>%
+  summarise(fru_weight_in = sum(weight))
+
+pseudoclone_out_fru <- pseudoclone_out %>% 
+  filter(dimorphic_partner == "Y") %>%
+  group_by(bodyid) %>%
+  summarise(fru_weight_out = sum(weight))
+
+connection_table_nonfru <- left_join(connection_table_nonfru, pseudoclone_in_fru, by = "bodyid")
+connection_table_nonfru <- left_join(connection_table_nonfru, pseudoclone_out_fru, by = "bodyid")
+connection_table_nonfru$fru_weight_in <- ifelse(is.na(connection_table_nonfru$fru_weight_in), 0, connection_table_nonfru$fru_weight_in)
+connection_table_nonfru$fru_weight_out <- ifelse(is.na(connection_table_nonfru$fru_weight_out), 0, connection_table_nonfru$fru_weight_out)
+
+connection_table_nonfru$fru_total <- connection_table_nonfru$fru_weight_in + connection_table_nonfru$fru_weight_out
+
+connection_table_nonfru$fru_ratio <- connection_table_nonfru$fru_total/connection_table_nonfru$total
+```
+
+
+```{r}
+mba_filtered$bodyid <- as.integer(mba_filtered$bodyid)
+fru_clone_ratio <- left_join(connection_table_fru, mba_filtered, by = "bodyid")
+fru_clone_ratio
+```
+
+```{r}
+count_clones <- mba_filtered %>%
+  filter(bodyid %in% mba_fru & !duplicated(bodyid)) %>% 
   group_by(clone) %>%
   count()
 sum_count_clones <- sum(count_clones$n)
@@ -66,12 +154,273 @@ mba_nonfru <- mba_filtered %>%
   filter(Fru == "N")
 mba_nonfru <- mba_nonfru %>%
   filter(class == "central")
-random_mba_nonfru <- mba_nonfru %>% 
+random_mba_nonfru <- mba_nonfru %>%
+  distinct(bodyid) %>%
   sample_n(sum_count_clones) %>%
   select(bodyid) %>%
   pull()
-connection_table_nonfru <- mcns_connection_table(random_mba_nonfru)
+#saveRDS()
 ```
+
+```{r}
+#readRDS()
+pseudoclone_in <- mcns_connection_table(random_mba_nonfru, partners = "inputs", threshold = 2)
+pseudoclone_in$dimorphic_partner = NA
+pseudoclone_in$dimorphic_partner = ifelse(pseudoclone_in$partner %in% mba_fru, "Y", "N")
+
+pseudoclone_out <- mcns_connection_table(random_mba_nonfru, partners = "outputs", threshold = 2)
+pseudoclone_out$dimorphic_partner = NA
+pseudoclone_out$dimorphic_partner = ifelse(pseudoclone_out$partner %in% mba_fru, "Y", "N")
+
+pseudoclone_in2 <- pseudoclone_in %>% 
+  group_by(bodyid) %>%
+  summarise(weight = sum(weight))
+
+pseudoclone_out2 <- pseudoclone_out %>% 
+  group_by(bodyid) %>%
+  summarise(weight = sum(weight))
+
+connection_table_nonfru <- left_join(pseudoclone_in2, pseudoclone_out2, by = "bodyid")
+connection_table_nonfru <- connection_table_nonfru %>% rename("weight_in" = weight.x, "weight_out" = weight.y)
+
+connection_table_nonfru$weight_in <- ifelse(is.na(connection_table_nonfru$weight_in), 0, connection_table_nonfru$weight_in)
+connection_table_nonfru$weight_out <- ifelse(is.na(connection_table_nonfru$weight_out), 0, connection_table_nonfru$weight_out)
+
+connection_table_nonfru$total <- connection_table_nonfru$weight_in + connection_table_nonfru$weight_out
+
+pseudoclone_in_fru <- pseudoclone_in %>% 
+  filter(dimorphic_partner == "Y") %>%
+  group_by(bodyid) %>%
+  summarise(fru_weight_in = sum(weight))
+
+pseudoclone_out_fru <- pseudoclone_out %>% 
+  filter(dimorphic_partner == "Y") %>%
+  group_by(bodyid) %>%
+  summarise(fru_weight_out = sum(weight))
+
+connection_table_nonfru <- left_join(connection_table_nonfru, pseudoclone_in_fru, by = "bodyid")
+connection_table_nonfru <- left_join(connection_table_nonfru, pseudoclone_out_fru, by = "bodyid")
+connection_table_nonfru$fru_weight_in <- ifelse(is.na(connection_table_nonfru$fru_weight_in), 0, connection_table_nonfru$fru_weight_in)
+connection_table_nonfru$fru_weight_out <- ifelse(is.na(connection_table_nonfru$fru_weight_out), 0, connection_table_nonfru$fru_weight_out)
+
+connection_table_nonfru$fru_total <- connection_table_nonfru$fru_weight_in + connection_table_nonfru$fru_weight_out
+
+connection_table_nonfru$fru_ratio <- connection_table_nonfru$fru_total/connection_table_nonfru$total
+```
+
+```{r}
+# Initialize an empty dataframe to store partitions
+partitions_df <- data.frame()
+
+# Track row position
+start <- 1
+
+# Loop over each 'n' in the count_clones dataframe
+for(i in 1:nrow(count_clones)) {
+  size <- count_clones$n[i]
+  
+  # Define the range of rows for the current partition
+  end <- start + size - 1
+  
+  # Extract the corresponding partition from connection_table_nonfru
+  partition <- connection_table_nonfru[start:end, ]
+  
+  # Add a new column for the 'clone' identifier
+  partition$clone <- count_clones$clone[i]
+  
+  # Append this partition to the final dataframe
+  partitions_df <- rbind(partitions_df, partition)
+  
+  # Update the start row for the next partition
+  start <- end + 1
+}
+```
+
+```{r}
+connection_table_nonfru2 <- partitions_df %>%
+  group_by(clone) %>%
+  mutate(mean_ratio = mean(fru_ratio)) %>%
+  select(clone, mean_ratio) %>%
+  distinct(clone, mean_ratio)
+```
+
+```{r}
+#maybe come back to see whether we can resolve pSG-d and pSG-e
+connection_table_fru2 <- connection_table_fru2 %>%
+  filter(clone != "pSG-e")
+```
+
+
+```{r}
+connection_table_fru2 <- connection_table_fru2 %>%
+  mutate(dataset = "clone")
+connection_table_nonfru2 <- connection_table_nonfru2 %>%
+  mutate(dataset = "pseudoclone")
+comparison_fru_ratio <- rbind(connection_table_fru2, connection_table_nonfru2)
+```
+
+```{r}
+ggplot(comparison_fru_ratio, aes(x = dataset, y = mean_ratio, color = dataset, shape = dataset)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2, size = 3, stroke = 1, fill = NA) +  # Plot the bodyid values with unfilled dots +
+  scale_shape_manual(values = c("clone" = 1, "pseudoclone" = 0)) +  # Dot (16) for Fru == "Y", Square (15) for Fru == "N"
+  scale_color_manual(values = c("clone" = "orange2", "pseudoclone" = "darkorchid2"))+
+  labs(title = "Mean Ratio by Dataset",
+       x = "Dataset",
+       y = "Mean Ratio") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 0, vjust = 0.5, hjust=1), 
+        axis.text = element_text(size = 15, family = "Avenir"),  # Adjust axis text size
+        axis.title.x = element_text(size = 18, family = "Avenir", margin = margin(t=20)), # Adjust axis title size
+        axis.title.y = element_text(size = 18, family = "Avenir"),
+        plot.title = element_text(size = 20, face = "italic", family = "Avenir"), # Adjust plot title size
+        legend.text = element_text(size = 18, family = "Avenir"),
+        legend.title = element_text(size = 20, family = "Avenir")
+        )
+
+```
+
+```{r}
+shapiro_test_result <- shapiro.test(comparison_fru_ratio$mean_ratio)
+
+kruskal_test_result <- kruskal.test(mean_ratio ~ dataset, data = comparison_fru_ratio)
+print(kruskal_test_result)
+```
+```{r}
+# Filter and sample distinct bodyids while retaining hemilineage information
+sampled_ids <- mba_nonfru %>%
+  filter(is.na(clone)) %>%
+  count(hemilineage.x) %>% arrange(desc(n))
+sampled_ids <- sampled_ids[-c(1:6),]
+
+
+
+data <- data.frame()
+data <- data %>% mutate(hemilineage.x = NA, n = NA, clone = NA)
+for(i in count_clones$clone)
+{
+  sign = 0
+  while(sign == 0)
+  {
+  j <- count_clones %>% filter(clone == i) %>% select(n) %>% pull()
+  hemilineage <- sampled_ids %>%
+  sample_n(1)
+    if(hemilineage$n >= j & !hemilineage$hemilineage.x %in% data$hemilineage.x)
+    {
+      hemilineage <- hemilineage %>% mutate(clone = i, n = j)
+      data <- rbind(data, hemilineage)
+      sign <- 1
+    } else {
+      sign <- 0
+    }
+  }
+}
+```
+
+```{r}
+mba_nonfru_f <- mba_nonfru %>% filter(hemilineage.x %in% data$hemilineage.x & is.na(clone)) 
+
+random_sample_nonfru <- data.frame()
+
+for(i in data$hemilineage.x){
+ x <- mba_nonfru_f %>% filter(hemilineage.x == i)
+ j <- data %>% filter(hemilineage.x == i) %>% select(n) %>% pull()
+y <- x %>% sample_n(j)
+  random_sample_nonfru <- rbind(random_sample_nonfru, y)
+}
+
+```
+
+```{r}
+pseudoclone_in <- mcns_connection_table(random_sample_nonfru, partners = "inputs", threshold = 2)
+pseudoclone_in$self_partner = NA
+pseudoclone_in$self_partner = ifelse(pseudoclone_in$partner %in% random_sample_nonfru$bodyid, "Y", "N")
+
+pseudoclone_out <- mcns_connection_table(random_sample_nonfru, partners = "outputs", threshold = 2)
+pseudoclone_out$self_partner = NA
+pseudoclone_out$self_partner = ifelse(pseudoclone_out$partner %in% random_sample_nonfru$bodyid, "Y", "N")
+
+pseudoclone_in2 <- pseudoclone_in %>% 
+  group_by(bodyid) %>%
+  summarise(weight = sum(weight))
+
+pseudoclone_out2 <- pseudoclone_out %>% 
+  group_by(bodyid) %>%
+  summarise(weight = sum(weight))
+
+connection_table_sample <- left_join(pseudoclone_in2, pseudoclone_out2, by = "bodyid")
+connection_table_sample <- connection_table_sample %>% rename("weight_in" = weight.x, "weight_out" = weight.y)
+
+connection_table_sample$weight_in <- ifelse(is.na(connection_table_sample$weight_in), 0, connection_table_sample$weight_in)
+connection_table_sample$weight_out <- ifelse(is.na(connection_table_sample$weight_out), 0, connection_table_sample$weight_out)
+
+connection_table_sample$total <- connection_table_sample$weight_in + connection_table_sample$weight_out
+
+pseudoclone_in_self <- pseudoclone_in %>% 
+  filter(self_partner == "Y") %>%
+  group_by(bodyid) %>%
+  summarise(self_weight_in = sum(weight))
+
+pseudoclone_out_self <- pseudoclone_out %>% 
+  filter(self_partner == "Y") %>%
+  group_by(bodyid) %>%
+  summarise(self_weight_out = sum(weight))
+
+connection_table_sample <- left_join(connection_table_sample, pseudoclone_in_self, by = "bodyid")
+connection_table_sample <- left_join(connection_table_sample, pseudoclone_out_self, by = "bodyid")
+connection_table_sample$self_weight_in <- ifelse(is.na(connection_table_sample$self_weight_in), 0, connection_table_sample$self_weight_in)
+connection_table_sample$self_weight_out <- ifelse(is.na(connection_table_sample$self_weight_out), 0, connection_table_sample$self_weight_out)
+
+connection_table_sample$self_total <- connection_table_sample$self_weight_in + connection_table_sample$self_weight_out
+
+connection_table_sample$self_ratio <- connection_table_sample$self_total/connection_table_sample$total
+```
+
+```{r}
+random_sample_nonfru$bodyid <- as.integer(random_sample_nonfru$bodyid)
+connection_table_sample1 <- left_join(connection_table_sample, random_sample_nonfru, by = "bodyid")
+connection_table_sample1 <- connection_table_sample1 %>%
+  group_by(hemilineage.x) %>%
+  mutate(mean_ratio = mean(self_ratio)) %>%
+  select(hemilineage.x, mean_ratio) %>%
+  distinct(hemilineage.x, mean_ratio) %>%
+  rename("clone" = hemilineage.x) %>%
+  mutate(dataset = "sample")
+
+comparison_fru_ratio2 <- rbind(connection_table_fru2, connection_table_sample1)
+```
+
+```{r}
+ggplot(comparison_fru_ratio2, aes(x = dataset, y = mean_ratio, color = dataset, shape = dataset)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2, size = 3, stroke = 1, fill = NA) +  # Plot the bodyid values with unfilled dots +
+  scale_shape_manual(values = c("clone" = 1, "sample" = 0)) +  # Dot (16) for Fru == "Y", Square (15) for Fru == "N"
+  scale_color_manual(values = c("clone" = "orange2", "sample" = "darkorchid2"))+
+  labs(title = "Mean Ratio by Dataset",
+       x = "Dataset",
+       y = "Mean Ratio") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 0, vjust = 0.5, hjust=1), 
+        axis.text = element_text(size = 15, family = "Avenir"),  # Adjust axis text size
+        axis.title.x = element_text(size = 18, family = "Avenir", margin = margin(t=20)), # Adjust axis title size
+        axis.title.y = element_text(size = 18, family = "Avenir"),
+        plot.title = element_text(size = 20, face = "italic", family = "Avenir"), # Adjust plot title size
+        legend.text = element_text(size = 18, family = "Avenir"),
+        legend.title = element_text(size = 20, family = "Avenir")
+        )
+
+```
+
+```{r}
+shapiro_test_result <- shapiro.test(comparison_fru_ratio2$mean_ratio)
+print(shapiro_test_result)
+
+kruskal_test_result <- kruskal.test(mean_ratio ~ dataset, data = comparison_fru_ratio2)
+print(kruskal_test_result)
+```
+
+
+
 
 
 

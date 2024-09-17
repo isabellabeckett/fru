@@ -22,7 +22,6 @@ library(igraph)
 library(visNetwork)
 ```
 
-
 ```{r}
 complete_hemilineages3 <- complete_hemilineages2 %>%
   mutate(adjusted_ratio_weight = 2/(1+exp(1)^-(log(percent_dimorphic_output/percent_dimorphic_input)))) %>%

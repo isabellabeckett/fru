@@ -399,9 +399,9 @@ ggplot(data = FW_complete_hemilineages2, aes(x = clone, y = percent_dimorphic_in
   scale_color_manual(values = c("Y" = "orange2", "N" = "darkorchid2"))+
   labs(
     x = "Clone",
-    y = "Percent Dimorphic Input",
-    title = "Percent Dimorphic Input by Clone and Fru",
-    color = "Clone",
+    y = "Percent Fru+ input",
+    title = "Percent Fru+ input by clone and Fru expression",
+    color = "Fru",
     shape = "Fru"
   ) +
   theme_minimal() +
@@ -435,9 +435,9 @@ ggplot(data = FW_complete_hemilineages2, aes(x = clone, y = percent_dimorphic_ou
   scale_color_manual(values = c("Y" = "orange2", "N" = "darkorchid2"))+
   labs(
     x = "Clone",
-    y = "Percent Dimorphic Output",
-    title = "Percent Dimorphic Output by Clone and Fru",
-    color = "Clone",
+    y = "Percent Fru+ output",
+    title = "Percent Fru+ output by clone and Fru expression",
+    color = "Fru",
     shape = "Fru"
   ) +
   theme_minimal() +

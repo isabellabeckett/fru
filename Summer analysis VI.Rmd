@@ -10,6 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r}
+library(googlesheets4)
 library(malecns)
 library(dplyr)
 library(nat.nblast)
@@ -23,8 +24,20 @@ library(visNetwork)
 ```
 
 ```{r}
+fru.url <- "https://docs.google.com/spreadsheets/d/1RvzMYSPB01eG1X_sI6Xrp48s4XgwdXjTrNoGCtR39BI/edit?gid=1045159116#gid=1045159116" 
+summary <- googlesheets4::read_sheet(fru.url, sheet = "Summary")
+class <- summary %>% select(Clones, Putative_Class)
+```
+
+
+```{r}
+#clone <- FW_combined_data %>% 
+#  filter(Fru == "N") %>%
+#  select(clone)
+#clone <- unlist(clone)
 clone <- unlist(FW_combined_data$clone)
 clone <- clone %>% unique()
+
 FW_allclone_o <- data.frame()
 for(cl in clone)
 {
@@ -65,8 +78,6 @@ FW_allclone_o_com <- FW_allclone_o_com %>%
 ```
 
 ```{r}
-clone <- unlist(FW_combined_data$clone)
-clone <- clone %>% unique()
 c = length(clone)
 FW_adj <- matrix(nrow = c, ncol = c)
 clone_short <- sub("^FW_", "", clone)
@@ -91,7 +102,7 @@ for(ca in clone)
 ```
 
 ```{r}
-png(file= "~/Documents/Greg Jefferis' lab/fru/network_female_o_frutofru.png",
+png(file= "~/Documents/Greg Jefferis' lab/fru/network_female_o_frutofru_scheme.png",
 width=3000, height=3000)
 
 # Create a graph object from the adjacency matrix
@@ -106,15 +117,18 @@ scaled_edge_widths <- edge_weights / max(edge_weights)*20
 # Set edge color with transparency (e.g., "black" with 50% transparency)
 transparent_edge_color <- adjustcolor("black", alpha.f = 0.5)
 
-node_categories <- c("olfactory", "auditory", "visual", "auditory", "olfactory", "olfactory", "auditory", "visual", "auditory", "olfactory", "auditory", "gustatory", "olfactory", "visual", "auditory", "auditory", "descending", "olfactory", "visual", "auditory", "olfactory", "auditory", "olfactory", "olfactory", "olfactory", "visual", "visual", "auditory", "auditory", "visual", "visual", "visual", "visual", "auditory", "auditory", "auditory", "auditory", "auditory", "visual", "auditory", "descending", "auditory", "auditory", "auditory", "auditory", "visual", "auditory", "auditory")
+colnames <- tibble(colnames(FW_adj))
+colnames(colnames) <- "Clones"
+node_categories <- left_join(colnames, class, by = "Clones")
+node_categories <- unlist(node_categories[,2])
 
 # Map categories to colors
 category_colors <- c(
-  "olfactory" = "pink",
-  "auditory" = "lightblue1",
-  "visual" = "palegreen1",
-  "gustatory" = "violet",
-  "descending" = "bisque"
+  "Olfactory" = "pink",
+  "Auditory" = "lightblue1",
+  "Visual" = "palegreen1",
+  "Gustatory" = "violet",
+  "Descending" = "bisque"
 )
 
 # Assign colors to nodes based on their category
@@ -144,17 +158,17 @@ for (i in seq_along(E(network))) {
 # Plot the graph with custom edge widths and transparency
 plot(
   network,
-  layout = layout_in_circle,
+  layout = layout_with_fr,
   vertex.color = vertex_colours,
   vertex.frame.color = "white",
-  vertex.size = 15,
+  vertex.size = 5,
   vertex.label.family = "Avenir",
   vertex.label.cex = 5,
   edge.width = scaled_edge_widths,                   
   edge.color = adjustcolor(edge_colours, alpha.f = 0.5),               
   edge.arrow.size = 0.1,
   edge.arrow.mode = 2,
-  edge.curved = 0.1
+  edge.curved = 0.2
 )
 
 dev.off()
@@ -183,14 +197,19 @@ plot(
 ```
 
 ```{r}
-clone <- unlist(FW_combined_data$clone)
+clone <- FW_combined_data %>% 
+  filter(Fru == "N") %>%
+  select(clone)
+clone <- unlist(clone)
+#clone <- unlist(FW_combined_data$clone)
 clone <- clone %>% unique()
+
 FW_allclone_i <- data.frame()
 for(cl in clone)
 {
   message("Processing clone ", cl)
   FW_byclone_i <- data.frame()
-  subset <- FW_combined_data[FW_combined_data$clone == cl & FW_combined_data$Fru =="Y", "root_id"]
+  subset <- FW_combined_data[FW_combined_data$clone == cl & FW_combined_data$Fru =="N", "root_id"]
   subset <- unlist(subset)
   s <- length(subset)
   for(i in 1:s)
@@ -249,7 +268,7 @@ for(ca in clone)
 ```
 
 ```{r}
-png(file= "~/Documents/Greg Jefferis' lab/fru/network_female_i_frutofru.png",
+png(file= "~/Documents/Greg Jefferis' lab/fru/network_female_i_nonfrutofru_scheme.png",
 width=3000, height=3000)
 
 # Create a graph object from the adjacency matrix
@@ -264,29 +283,31 @@ scaled_edge_widths <- edge_weights / max(edge_weights)*20  # Adjust the multipli
 # Set edge color with transparency (e.g., "black" with 50% transparency)
 transparent_edge_color <- adjustcolor("black", alpha.f = 0.5)
 
-node_categories <- c("olfactory", "auditory", "visual", "auditory", "olfactory", "olfactory", "auditory", "visual", "auditory", "auditory", "gustatory", "olfactory", "visual", "auditory", "auditory", "descending", "olfactory", "visual", "auditory", "olfactory", "auditory", "olfactory", "olfactory", "olfactory", "visual", "visual", "auditory", "auditory", "visual", "visual", "visual", "visual", "auditory", "auditory", "auditory", "auditory", "auditory", "visual", "auditory", "descending", "auditory", "auditory", "auditory", "auditory", "visual", "auditory", "auditory")
+colnames <- tibble(colnames(FW_adj2))
+colnames(colnames) <- "Clones"
+node_categories <- left_join(colnames, class, by = "Clones")
+node_categories <- unlist(node_categories[,2])
 
 # Map categories to colors
-# Map categories to colors
 category_colors <- c(
-  "olfactory" = "pink",
-  "auditory" = "lightblue1",
-  "visual" = "palegreen1",
-  "gustatory" = "violet",
-  "descending" = "bisque"
+  "Olfactory" = "pink",
+  "Auditory" = "lightblue1",
+  "Visual" = "palegreen1",
+  "Gustatory" = "violet",
+  "Descending" = "bisque"
 )
 
 # Assign colors to nodes based on their category
 vertex_colours <- category_colors[node_categories]
 
 # Initialize an empty vector to store edge colors
-edge_colours <- rep(NA, length(E(network)))
+edge_colours <- rep(NA, length(E(network2)))
 
 # Iterate over each edge and assign color based on direction
-for (i in seq_along(E(network))) {
-  edge <- E(network)[i]
-  source_node <- ends(network, edge)[1]  # Get the source node name
-  target_node <- ends(network, edge)[2]  # Get the target node name
+for (i in seq_along(E(network2))) {
+  edge <- E(network2)[i]
+  source_node <- ends(network2, edge)[1]  # Get the source node name
+  target_node <- ends(network2, edge)[2]  # Get the target node name
   
   # Find the indices of the source and target nodes in the clone_short list
   source_index <- match(source_node, clone_short)
@@ -303,17 +324,17 @@ for (i in seq_along(E(network))) {
 # Plot the graph with custom edge widths and transparency
 plot(
   network,
-  layout = layout_in_circle,
+  layout = layout_with_fr,
   vertex.color = vertex_colours,
   vertex.frame.color = "white",
-  vertex.size = 15,
+  vertex.size = 5,
   vertex.label.family = "Avenir",
   vertex.label.cex = 5,
   edge.width = scaled_edge_widths,                   
   edge.color = adjustcolor(edge_colours, alpha.f = 0.5),               
   edge.arrow.size = 0.1,
   edge.arrow.mode = 2,
-  edge.curved = 0.1
+  edge.curved = 0.2
 )
 
 dev.off()
@@ -389,9 +410,15 @@ allclone_o_com <- allclone_o_com %>%
 ```
 
 ```{r}
+clone <- unlist(combined_data$clone)
+clone <- clone %>% unique()
 clone <- clone[clone != "pSG-a"]
 clone <- clone[clone != "aIP-f"]
 clone <- clone[clone != "pSP-e"]
+clone <- clone[clone != "pIP-j"]
+clone <- clone[clone != "pSG-e"]
+clone <- clone[clone != "aSG-a"]
+clone <- clone[clone != "pMP-g"]
 c = length(clone)
 MCNS_adj <- matrix(nrow = c, ncol = c)
 colnames(MCNS_adj) = rownames(MCNS_adj) = clone
@@ -415,7 +442,7 @@ for(ca in clone)
 ```
 
 ```{r}
-png(file= "~/Documents/Greg Jefferis' lab/fru/network_male_o_frutofru.png",
+png(file= "~/Documents/Greg Jefferis' lab/fru/network_male_o_frutofru_scheme.png",
 width=3000, height=3000)
 
 network3 <- graph_from_adjacency_matrix(MCNS_adj, mode = "directed", weighted = TRUE, diag = FALSE)
@@ -424,15 +451,18 @@ edge_weights <- E(network3)$weight
 
 scaled_edge_widths <- edge_weights / max(edge_weights) *20
 
-node_categories <- c("olfactory", "gustatory", "visual", "auditory", "olfactory", "olfactory", "auditory", "visual", "auditory", "olfactory","auditory", "gustatory", "olfactory", "auditory", "auditory", "descending", "olfactory", "visual", "auditory", "olfactory", "auditory", "olfactory", "olfactory", "olfactory", "visual", "visual", "auditory", "auditory", "visual", "descending", "visual", "visual", "visual", "auditory", "auditory", "auditory", "auditory", "auditory", "visual", "descending", "auditory", "auditory", "auditory", "auditory", "auditory", "auditory", "visual", "auditory")
+colnames <- tibble(colnames(MCNS_adj))
+colnames(colnames) <- "Clones"
+node_categories <- left_join(colnames, class, by = "Clones")
+node_categories <- unlist(node_categories[,2])
 
 # Map categories to colors
 category_colors <- c(
-  "olfactory" = "pink",
-  "auditory" = "lightblue1",
-  "visual" = "palegreen1",
-  "gustatory" = "violet",
-  "descending" = "bisque"
+  "Olfactory" = "pink",
+  "Auditory" = "lightblue1",
+  "Visual" = "palegreen1",
+  "Gustatory" = "violet",
+  "Descending" = "bisque"
 )
 
 vertex_colours <- category_colors[node_categories]
@@ -456,10 +486,10 @@ for (i in seq_along(E(network3))) {
 
 plot(
   network3,
-  layout = layout_in_circle,
+  layout = layout_with_fr,
   vertex.color = vertex_colours,
   vertex.frame.color = "white",
-  vertex.size = 15,
+  vertex.size = 5,
   vertex.label.family = "Avenir",
   vertex.label.cex = 5,
   edge.width = scaled_edge_widths,                  
@@ -514,9 +544,15 @@ allclone_i_com <- allclone_i_com %>%
 ```
 
 ```{r}
-clone <- clone[clone != "pSG-a"]
-clone <- clone[clone != "aIP-f"]
-clone <- clone[clone != "pSP-e"]
+clone <- unlist(combined_data$clone)
+clone <- clone %>% unique()
+#clone <- clone[clone != "pSG-a"]
+#clone <- clone[clone != "aIP-f"]
+#clone <- clone[clone != "pSP-e"]
+#clone <- clone[clone != "pIP-j"]
+#clone <- clone[clone != "pSG-e"]
+#clone <- clone[clone != "aSG-a"]
+#clone <- clone[clone != "pMP-g"]
 c = length(clone)
 MCNS_adj2 <- matrix(nrow = c, ncol = c)
 colnames(MCNS_adj2) = rownames(MCNS_adj2) = clone
@@ -540,34 +576,37 @@ for(ca in clone)
 ```
 
 ```{r}
-png(file= "~/Documents/Greg Jefferis' lab/fru/network_male_i_frutofru_scheme.png",
+png(file= "~/Documents/Greg Jefferis' lab/fru/network_male_i_frutofru.png",
 width=3000, height=3000)
 
-network3 <- graph_from_adjacency_matrix(MCNS_adj2, mode = "directed", weighted = TRUE, diag = FALSE)
+network4 <- graph_from_adjacency_matrix(MCNS_adj2, mode = "directed", weighted = TRUE, diag = FALSE)
 
-edge_weights <- E(network3)$weight
+edge_weights <- E(network4)$weight
 
 scaled_edge_widths <- edge_weights / max(edge_weights) *20
 
-node_categories <- c("olfactory", "gustatory", "visual", "auditory", "olfactory", "olfactory", "auditory", "visual", "auditory", "olfactory","auditory", "gustatory", "olfactory", "auditory", "auditory", "descending", "olfactory", "visual", "auditory", "olfactory", "auditory", "olfactory", "olfactory", "olfactory", "visual", "visual", "auditory", "auditory", "visual", "descending", "visual", "visual", "visual", "auditory", "auditory", "auditory", "auditory", "auditory", "visual", "descending", "auditory", "auditory", "auditory", "auditory", "auditory", "auditory", "visual", "auditory")
+colnames <- tibble(colnames(MCNS_adj2))
+colnames(colnames) <- "Clones"
+node_categories <- left_join(colnames, class, by = "Clones")
+node_categories <- unlist(node_categories[,2])
 
 # Map categories to colors
 category_colors <- c(
-  "olfactory" = "pink",
-  "auditory" = "lightblue1",
-  "visual" = "palegreen1",
-  "gustatory" = "violet",
-  "descending" = "bisque"
+  "Olfactory" = "pink",
+  "Auditory" = "lightblue1",
+  "Visual" = "palegreen1",
+  "Gustatory" = "violet",
+  "Descending" = "bisque"
 )
 
 vertex_colours <- category_colors[node_categories]
 
-edge_colours <- rep(NA, length(E(network3)))
+edge_colours <- rep(NA, length(E(network4)))
 
-for (i in seq_along(E(network3))) {
+for (i in seq_along(E(network4))) {
   edge <- E(network3)[i]
-  source_node <- ends(network3, edge)[1]  
-  target_node <- ends(network3, edge)[2]  
+  source_node <- ends(network4, edge)[1]  
+  target_node <- ends(network4, edge)[2]  
   
   source_index <- match(source_node, clone)
   target_index <- match(target_node, clone)
@@ -581,10 +620,10 @@ for (i in seq_along(E(network3))) {
 
 plot(
   network3,
-  layout = layout_with_fr,
+  layout = layout_in_circle,
   vertex.color = vertex_colours,
   vertex.frame.color = "white",
-  vertex.size = 15,
+  vertex.size = 5,
   vertex.label.family = "Avenir",
   vertex.label.cex = 5,
   edge.width = scaled_edge_widths,                  

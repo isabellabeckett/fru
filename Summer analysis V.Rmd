@@ -235,8 +235,8 @@ ggplot(FW_spec_partner_weight, aes(x = clone, y = percent_weight, fill = clone))
 
 ```{r}
 partner_spec <- data.frame()
-clone_neurons <- unlist(combined_data[combined_data$clone == "aSP-i" & combined_data$Fru == "Y", "bodyid"])
-  connection_table <- mcns_connection_table(clone_neurons, partners = "o", threshold = 2)
+clone_neurons <- unlist(combined_data[combined_data$clone == "pMP-e" & combined_data$Fru == "Y", "bodyid"])
+  connection_table <- mcns_connection_table(clone_neurons, partners = "i", threshold = 2)
   colnames(connection_table)[colnames(connection_table) == "bodyid"] <- "query"
   colnames(connection_table)[colnames(connection_table) == "partner"] <- "bodyid"
   clone_conn <- merge(connection_table, complete_hemilineages[, c("bodyid", "clone", "Fru")], 
