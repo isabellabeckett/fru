@@ -74,6 +74,11 @@ FW_complete_hemilineages <- FW_combined_data %>% filter(!clone %in% FW_clones_re
 ```
 
 ```{r}
+saveRDS(FW_combined_data, "/Users/bhumpanya/Documents/Greg Jefferis' lab/fru/RDSfiles/FW_combined.RDS")
+```
+
+
+```{r}
 FW_clones_with_both_fru <- FW_complete_hemilineages %>%
   group_by(clone) %>%
   filter(any(Fru == "Y") & any(Fru == "N")) %>%
@@ -86,6 +91,8 @@ FW_complete_YandN <- FW_complete_hemilineages %>%
 
 
 ```{r}
+#CAN RUN, BUT HAS ALREADY BEEN SAVED AS RDS
+
 compute_totals_indv_pre <- function(df, direction, threshold = 2) {
   choose_segmentation('public')
   connection_table <- flywire_partner_summary(df, partners = "i", threshold = threshold)
@@ -143,6 +150,7 @@ FWdm2 <- FW_dimorphic_summary %>%
 ```
 
 ```{r}
+#CAN RUN, BUT HAS ALREADY BEEN SAVED AS RDS
 s <- length(FW_complete_YandN$root_id)
 FW_neurons <- unlist(FW_complete_YandN$root_id)
 for(i in 1:s)
@@ -167,16 +175,17 @@ for(i in 1:s)
 ```
 
 ```{r}
+#UPDATE SPECIFIC NEURONS OR CLONES
 #s <- length(to_do)
-FW_neurons <- unlist(`FWsheet_FW_aSP-i`$root_id)
-for(i in "720575940628653199")
+FW_neurons <- unlist(`FWsheet_FW_aDT-c`$root_id)
+for(i in FW_neurons)
 {
   message(paste("Processing neuron", i))
   FW_partners <- tryCatch({
     suppressWarnings({
       suppressMessages({
     choose_segmentation('public')
-    flywire_partner_summary(i, partners = "outputs", threshold = 2)
+    flywire_partner_summary(i, partners = "inputs", threshold = 2)
       })
     })
   }, error = function(e) {
@@ -185,12 +194,13 @@ for(i in "720575940628653199")
   })
   
   if (!is.null(FW_partners)) {
-    saveRDS(FW_partners, paste0("~/Downloads/FW_partners/",i, ".RDS"))
+    saveRDS(FW_partners, paste0("~/Downloads/FW_partners2/",i, ".RDS"))
   }
 }
 ```
 
 ```{r}
+#CAN RUN, BUT HAS ALREADY BEEN SAVED AS RDS
   # Filter data for the current clone
   FW_clone_Y_table <- FW_complete_hemilineages %>% filter(Fru == "Y") 
   FW_clone_N_table <- FW_complete_hemilineages %>% filter(Fru == "N") 
@@ -301,14 +311,14 @@ for(i in 1:s)
 
 ```{r}
 saveRDS(FW_clone_Y_in, "/Users/bhumpanya/Downloads/FW_clone_Y_in.RDS")
-saveRDS(FW_clone_N_in, "/Users/bhumpanya/Downloads/FW_clone_N_in.RDS")
+saveRDS(FW_clone_N_in, "/Users/bhumpanya/Downloads/FW_clone_N_in2.RDS")
 saveRDS(FW_clone_Y_out, "/Users/bhumpanya/Downloads/FW_clone_Y_out.RDS")
 saveRDS(FW_clone_N_out, "/Users/bhumpanya/Downloads/FW_clone_N_out.RDS")
 ```
 
 ```{r}
 FW_clone_Y_in <- readRDS("/Users/bhumpanya/Downloads/FW_clone_Y_in.RDS")
-FW_clone_N_in <- readRDS("/Users/bhumpanya/Downloads/FW_clone_N_in.RDS")
+FW_clone_N_in <- readRDS("/Users/bhumpanya/Downloads/FW_clone_N_in2.RDS")
 FW_clone_Y_out <- readRDS("/Users/bhumpanya/Downloads/FW_clone_Y_out.RDS")
 FW_clone_N_out <- readRDS("/Users/bhumpanya/Downloads/FW_clone_N_out.RDS")
 ```
@@ -476,12 +486,7 @@ ggplot(data = FW_complete_hemilineages2, aes(x = percent_dimorphic_input, y = pe
 ```
 
 ```{r}
-FW_unmatched_Y <- FW_complete_hemilineages2 %>% filter(clone == "FW_aSP-a" & Fru == "Y") %>% select(root_id) %>% unlist()
-FW_unmatched_N <- FW_complete_hemilineages2 %>% filter(clone == "FW_aSP-a" & Fru == "N") %>% select(root_id) %>% unlist()
-```
-
-
-```{r}
+#UPDATE MISSING NEURONS
 s <- length(FW_unmatched_Y)
 for(i in 1:s)
 {
@@ -591,8 +596,8 @@ FW_complete_clones <- FW_complete_clones %>%
 ggplot(FW_complete_clones, aes(x = average_dimorphic_input, y = average_dimorphic_output, color = clone)) +
   geom_point(aes(shape = Fru), size = 5) + # Use shape to distinguish Fru
   geom_line(aes(group = clone), size = 1, alpha = 0.5) +
-  xlim(0,40) +
-  ylim(0,40) +
+  #xlim(0,40) +
+  #ylim(0,40) +
   scale_shape_manual(values = c(17, 19, 21)) + # Open dot for Fru=="Y" (21) and closed dot for Fru=="N" (19)
   labs(x = "Percent Dimorphic Input", y = "Percent Dimorphic Output", title = "Female Fru+ Input vs Output") +
   theme_minimal() +

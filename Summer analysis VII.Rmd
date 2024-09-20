@@ -23,6 +23,10 @@ library(visNetwork)
 ```
 
 ```{r}
+FW_complete_hemilineages2 <- readRDS("/Users/bhumpanya/Documents/Greg Jefferis' lab/fru/RDSfiles/FW_complete2.RDS")
+```
+
+```{r}
 complete_hemilineages3 <- complete_hemilineages2 %>%
   mutate(adjusted_ratio_weight = 2/(1+exp(1)^-(log(percent_dimorphic_output/percent_dimorphic_input)))) %>%
     filter(!is.nan(adjusted_ratio_weight))

@@ -23,6 +23,30 @@ library(arrow)
 ```
 
 ```{r}
+FW_combined_data <- readRDS("/Users/bhumpanya/Documents/Greg Jefferis' lab/fru/RDSfiles/FW_combined.RDS")
+combined_data <- readRDS("/Users/bhumpanya/Documents/Greg Jefferis' lab/fru/RDSfiles/combine.RDS")
+FW.Y <- FW_combined_data %>% filter(Fru=="Y") %>% select(root_id)
+```
+
+```{r}
+FW_all_hemilineages <- FW_combined_data %>% filter(is.na(hemilineage)) %>% select(clone)
+FW_clones_remove <- unique(FW_all_hemilineages$clone)
+FW_complete_hemilineages <- FW_combined_data %>% filter(!clone %in% FW_clones_remove)
+```
+
+
+```{r}
+FW_clones_with_both_fru <- FW_complete_hemilineages %>%
+  group_by(clone) %>%
+  filter(any(Fru == "Y") & any(Fru == "N")) %>%
+  pull(clone) %>%
+  unique()
+FW_complete_YandN <- FW_complete_hemilineages %>%
+  filter(clone %in% FW_clones_with_both_fru)
+```
+
+
+```{r}
 FW_clone_Y_table <- FW_complete_hemilineages %>% filter(Fru == "Y") 
 FW_clone_N_table <- FW_complete_hemilineages %>% filter(Fru == "N") 
 FW_clone_Y_root_id <- FW_clone_Y_table$root_id
@@ -191,6 +215,11 @@ for(i in s) {
 ```
 
 ```{r}
+saveRDS(FW_complete_hemilineages2, "/Users/bhumpanya/Documents/Greg Jefferis' lab/fru/RDSfiles/FW_complete2.RDS")
+```
+
+
+```{r}
 FWpartner_spec <- data.frame()
 subset <- FW_complete_YandN[FW_complete_YandN$clone == "FW_aSP-i" & FW_complete_YandN$Fru == "Y", "root_id"]
 subset <- unlist(subset)
@@ -239,7 +268,7 @@ clone_neurons <- unlist(combined_data[combined_data$clone == "pMP-e" & combined_
   connection_table <- mcns_connection_table(clone_neurons, partners = "i", threshold = 2)
   colnames(connection_table)[colnames(connection_table) == "bodyid"] <- "query"
   colnames(connection_table)[colnames(connection_table) == "partner"] <- "bodyid"
-  clone_conn <- merge(connection_table, complete_hemilineages[, c("bodyid", "clone", "Fru")], 
+  clone_conn <- merge(connection_table, combined_data[, c("bodyid", "clone", "Fru")], 
                       by = "bodyid", 
                       all.x = TRUE)
   partner_spec <- rbind(partner_spec, clone_conn)

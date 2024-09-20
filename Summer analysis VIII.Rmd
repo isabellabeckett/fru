@@ -21,6 +21,17 @@ library(ggplot2)
 library(arrow)
 ```
 
+```{r}
+mba <- mcns_body_annotations()
+combined_data <- readRDS("/Users/bhumpanya/Documents/Greg Jefferis' lab/fru/RDSfiles/combine.RDS")
+```
+
+```{r}
+all_hemilineages <- combined_data %>% filter(is.na(hemilineage)) %>% select(clone)
+clones_remove <- unique(all_hemilineages$clone)
+complete_hemilineages <- combined_data %>% filter(!clone %in% clones_remove)
+```
+
 
 ```{r}
 mba_filtered <- mba %>% 
@@ -134,7 +145,6 @@ connection_table_nonfru$fru_total <- connection_table_nonfru$fru_weight_in + con
 connection_table_nonfru$fru_ratio <- connection_table_nonfru$fru_total/connection_table_nonfru$total
 ```
 
-
 ```{r}
 mba_filtered$bodyid <- as.integer(mba_filtered$bodyid)
 fru_clone_ratio <- left_join(connection_table_fru, mba_filtered, by = "bodyid")
@@ -159,7 +169,7 @@ random_mba_nonfru <- mba_nonfru %>%
   sample_n(sum_count_clones) %>%
   select(bodyid) %>%
   pull()
-#saveRDS()
+saveRDS(random_mba_nonfru, file = "~/Documents/Greg Jefferis' lab/fru/pseudoclone1")
 ```
 
 ```{r}
@@ -328,7 +338,6 @@ for(i in data$hemilineage.x){
 y <- x %>% sample_n(j)
   random_sample_nonfru <- rbind(random_sample_nonfru, y)
 }
-
 ```
 
 ```{r}
@@ -374,6 +383,14 @@ connection_table_sample$self_weight_out <- ifelse(is.na(connection_table_sample$
 connection_table_sample$self_total <- connection_table_sample$self_weight_in + connection_table_sample$self_weight_out
 
 connection_table_sample$self_ratio <- connection_table_sample$self_total/connection_table_sample$total
+```
+
+```{r}
+saveRDS(connection_table_sample, file = "~/Documents/Greg Jefferis' lab/fru/Pseudoclone/pseudoclone3")
+```
+
+```{r}
+connection_table_sample <- readRDS(file = "~/Documents/Greg Jefferis' lab/fru/Pseudoclone/pseudoclone")
 ```
 
 ```{r}

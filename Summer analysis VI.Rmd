@@ -27,6 +27,8 @@ library(visNetwork)
 fru.url <- "https://docs.google.com/spreadsheets/d/1RvzMYSPB01eG1X_sI6Xrp48s4XgwdXjTrNoGCtR39BI/edit?gid=1045159116#gid=1045159116" 
 summary <- googlesheets4::read_sheet(fru.url, sheet = "Summary")
 class <- summary %>% select(Clones, Putative_Class)
+FW_combined_data <- readRDS("/Users/bhumpanya/Documents/Greg Jefferis' lab/fru/RDSfiles/FW_combined.RDS")
+combined_data <- readRDS("/Users/bhumpanya/Documents/Greg Jefferis' lab/fru/RDSfiles/combine.RDS")
 ```
 
 
@@ -112,7 +114,7 @@ network <- graph_from_adjacency_matrix(FW_adj, mode = "directed", weighted = TRU
 edge_weights <- E(network)$weight
 
 # Scale the edge weights to determine the edge widths
-scaled_edge_widths <- edge_weights / max(edge_weights)*20  
+scaled_edge_widths <- edge_weights*20 / max(edge_weights) 
 
 # Set edge color with transparency (e.g., "black" with 50% transparency)
 transparent_edge_color <- adjustcolor("black", alpha.f = 0.5)
@@ -197,11 +199,11 @@ plot(
 ```
 
 ```{r}
-clone <- FW_combined_data %>% 
-  filter(Fru == "N") %>%
-  select(clone)
-clone <- unlist(clone)
-#clone <- unlist(FW_combined_data$clone)
+#clone <- FW_combined_data %>% 
+#  filter(Fru == "N") %>%
+#  select(clone)
+#clone <- unlist(clone)
+clone <- unlist(FW_combined_data$clone)
 clone <- clone %>% unique()
 
 FW_allclone_i <- data.frame()
@@ -209,7 +211,7 @@ for(cl in clone)
 {
   message("Processing clone ", cl)
   FW_byclone_i <- data.frame()
-  subset <- FW_combined_data[FW_combined_data$clone == cl & FW_combined_data$Fru =="N", "root_id"]
+  subset <- FW_combined_data[FW_combined_data$clone == cl & FW_combined_data$Fru =="Y", "root_id"]
   subset <- unlist(subset)
   s <- length(subset)
   for(i in 1:s)
@@ -268,7 +270,7 @@ for(ca in clone)
 ```
 
 ```{r}
-png(file= "~/Documents/Greg Jefferis' lab/fru/network_female_i_nonfrutofru_scheme.png",
+png(file= "~/Documents/Greg Jefferis' lab/fru/network_female_i_frutofru_scheme.png",
 width=3000, height=3000)
 
 # Create a graph object from the adjacency matrix
@@ -278,7 +280,7 @@ network2 <- graph_from_adjacency_matrix(FW_adj2, mode = "directed", weighted = T
 edge_weights <- E(network2)$weight
 
 # Scale the edge weights to determine the edge widths
-scaled_edge_widths <- edge_weights / max(edge_weights)*20  # Adjust the multiplier for more differentiation
+scaled_edge_widths <- edge_weights*20 / max(edge_weights)   # Adjust the multiplier for more differentiation
 
 # Set edge color with transparency (e.g., "black" with 50% transparency)
 transparent_edge_color <- adjustcolor("black", alpha.f = 0.5)
@@ -449,7 +451,7 @@ network3 <- graph_from_adjacency_matrix(MCNS_adj, mode = "directed", weighted = 
 
 edge_weights <- E(network3)$weight
 
-scaled_edge_widths <- edge_weights / max(edge_weights) *20
+scaled_edge_widths <- edge_weights*20 / max(edge_weights) 
 
 colnames <- tibble(colnames(MCNS_adj))
 colnames(colnames) <- "Clones"
@@ -583,7 +585,7 @@ network4 <- graph_from_adjacency_matrix(MCNS_adj2, mode = "directed", weighted =
 
 edge_weights <- E(network4)$weight
 
-scaled_edge_widths <- edge_weights / max(edge_weights) *20
+scaled_edge_widths <- edge_weights*20 / max(edge_weights) 
 
 colnames <- tibble(colnames(MCNS_adj2))
 colnames(colnames) <- "Clones"
@@ -604,7 +606,7 @@ vertex_colours <- category_colors[node_categories]
 edge_colours <- rep(NA, length(E(network4)))
 
 for (i in seq_along(E(network4))) {
-  edge <- E(network3)[i]
+  edge <- E(network4)[i]
   source_node <- ends(network4, edge)[1]  
   target_node <- ends(network4, edge)[2]  
   

@@ -19,13 +19,9 @@ library(tidyr)
 library(coconatfly)
 library(ggplot2)
 library(tidyr)
-library(extrafont)
 ```
 
-
 ```{r}
-mba <- mcns_body_annotations()
-merged_df_all_info <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/1RvzMYSPB01eG1X_sI6Xrp48s4XgwdXjTrNoGCtR39BI/edit?gid=753368775#gid=753368775", sheet = "Fru_FW")
 fru.url <- "https://docs.google.com/spreadsheets/d/1RvzMYSPB01eG1X_sI6Xrp48s4XgwdXjTrNoGCtR39BI/edit?gid=1045159116#gid=1045159116" 
 summary = read_sheet(fru.url, sheet = "Summary")
 summary = summary %>% filter(`Found?` == "Y")
@@ -34,7 +30,10 @@ sheetnames <- na.omit(sheetnames)
 ```
 
 ```{r}
-table(!is.na(summary$`Yu 2010 Hemilineage`) | !is.na(summary$`Ito Lee Lineage`))
+info = flytable_list_rows('info', chunksize = 10000)
+infof <- info %>% 
+  filter(!duplicated(root_783)) %>% 
+  select(cell_type, root_783, ito_lee_hemilineage, hartenstein_hemilineage, side, malecns_type, hemibrain_type)
 ```
 
 ```{r}
@@ -69,8 +68,8 @@ all_hemilineage <- all_hemilineage %>%
   select(-hemilineage_prefix)
 ```
 
-
 ```{r}
+#TEST RUN, CAN SKIP
 ggplot(count_df, aes(x = count, y = reorder(hemilineage, count), fill = sex)) +
   geom_bar(stat = "identity") +
   labs(title = "Count of Neurons by hemilineage",
@@ -85,6 +84,8 @@ ggplot(count_df, aes(x = count, y = reorder(hemilineage, count), fill = sex)) +
 ```
 
 ```{r}
+#TEST RUN, CAN SKIP
+merged_df_all_info <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/1RvzMYSPB01eG1X_sI6Xrp48s4XgwdXjTrNoGCtR39BI/edit?gid=753368775#gid=753368775", sheet = "Fru_FW")
 all_hemilineage_fru <- all_hemilineage %>% 
   filter(hemilineage %in% merged_df_all_info$ito_lee_hemilineage) %>% 
   filter(!duplicated(bodyid))
@@ -93,6 +94,7 @@ all_hemilineage_fru <- merge(all_hemilineage_fru, merged_df_all_info, by.x = "he
 ```
 
 ```{r}
+#TEST RUN, CAN SKIP
 ggplot(count_df, aes(x = count, y = reorder(hemilineage, count), fill = sex)) +
   geom_bar(stat = "identity") +
   labs(title = "Count of Neurons by hemilineage",
@@ -108,6 +110,7 @@ ggplot(count_df, aes(x = count, y = reorder(hemilineage, count), fill = sex)) +
 
 
 ```{r}
+#TEST RUN, CAN SKIP
 #Hemilineage plot
 count_df = all_hemilineage_fru %>% filter(hemilineage != "putative_primary" & hemilineage != "VPNd2" & hemilineage != "DILP__prim" & hemilineage != "primary") %>% group_by(hemilineage, sex)  %>%
   summarize(count = n())  
@@ -117,6 +120,7 @@ count_wide <- count_df %>%
 ```
 
 ```{r}
+#TEST RUN, CAN SKIP
 #Clone plot
 count_df = all_hemilineage_fru %>% group_by(Clones, sex)  %>%
   summarize(count = n()) 
@@ -126,6 +130,7 @@ count_wide <- count_df %>%
 ```
 
 ```{r}
+#TEST RUN, CAN SKIP
 ggplot(count_wide, aes(x = difference, y = reorder(hemilineage, difference), fill = difference)) +
   geom_bar(stat = "identity") +
   labs(title = "Differences between FW and MCNS by hemilineage",
@@ -143,11 +148,13 @@ ggplot(count_wide, aes(x = difference, y = reorder(hemilineage, difference), fil
 ```
 
 ```{r}
+#TEST RUN, CAN SKIP
 fru_males <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/10XBTihDso3-_q_cZ0MlHIqtbh3F24qAIXODIibIrYgo/edit?gid=0#gid=0")
 fru_all <- all_hemilineage %>% filter(bodyid %in% fru_males$bodyid | bodyid %in% merged_df_all_info$root_id)
 ```
 
 ```{r}
+#TEST RUN, CAN SKIP
 count_df = fru_all %>% 
   filter(hemilineage != "putative_primary" & hemilineage != "VPNd2" & hemilineage != "DILP__prim" & hemilineage != "primary") %>% 
   group_by(hemilineage, sex)  %>%
@@ -158,6 +165,7 @@ count_wide <- count_df %>%
 ```
 
 ```{r}
+#TEST RUN, CAN SKIP
 ggplot(count_df, aes(x = count, y = reorder(hemilineage, count), fill = sex)) +
   geom_bar(stat = "identity") +
   labs(title = "Count of Neurons by hemilineage",
@@ -172,6 +180,7 @@ ggplot(count_df, aes(x = count, y = reorder(hemilineage, count), fill = sex)) +
 ```
 
 ```{r}
+#TEST RUN, CAN SKIP
 count_df = fru_all %>% group_by(Clones, sex)  %>%
   summarize(count = n()) 
 count_wide <- count_df %>%
@@ -180,6 +189,7 @@ count_wide <- count_df %>%
 ```
 
 ```{r}
+#TEST RUN, CAN SKIP
 ggplot(count_wide, aes(x = difference, y = reorder(Clones, difference), fill = difference)) +
   geom_bar(stat = "identity") +
   labs(title = "Differences between FW and MCNS by clones",
@@ -197,6 +207,10 @@ ggplot(count_wide, aes(x = difference, y = reorder(Clones, difference), fill = d
 ```
 
 ```{r}
+###START HERE
+
+
+#Plot comparing Observed and Expected
 df_long <- gather(summary, key = "type", value = "value", Observed, Expected)
 ggplot(df_long, aes(x = Clones, y = value, fill = type)) +
   geom_bar(stat = "identity", position = "dodge") +
@@ -214,6 +228,7 @@ ggplot(df_long, aes(x = Clones, y = value, fill = type)) +
 ```
 
 ```{r}
+#TEST RUN, CAN SKIP
 observed_expected <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/1Hupw1ywfFf9xlPff4mpnH_ogocA-bAFQeojAcTl3LnY/edit?gid=0#gid=0")
 fru_females <- merged_df_all_info %>% filter(!is.na(Cachero)) %>% select(root_id, Cachero)
 count_df = fru_females %>% group_by(Cachero)  %>%
@@ -224,6 +239,7 @@ OEFem <- observed_expected %>%
 ```
 
 ```{r}
+#TEST RUN, CAN SKIP
 df_long <- gather(OEFem, key = "type", value = "value", count, Expectedf)
 ggplot(df_long, aes(x = Clones, y = value, fill = type)) +
   geom_bar(stat = "identity", position = "dodge") +
@@ -241,6 +257,7 @@ ggplot(df_long, aes(x = Clones, y = value, fill = type)) +
 ```
 
 ```{r}
+#Plot to show how complete identification has been
 MCNS_found <- sum(summary$`Found?` == "Y")
 MCNS_entire_lineage <- sum(summary$`Entire lineage checked?` == "Y", na.rm = TRUE)
 FW_found <- sum(summary$`Found in FW?` == "Y")
@@ -269,18 +286,8 @@ ggplot(df_long, aes(x = level, y = value, fill = type)) +
 ```
 
 ```{r}
-group <- complete_hemilineages2 %>% filter(clone == "aDT-h")
-group_best <- group %>% arrange(desc(percent_dimorphic_output)) %>% filter(percent_dimorphic_output > 45) %>% select(bodyid)
-```
-
-```{r}
-library(fafbseg)
-flaa3 <- flywire_ids("/ito_lee_hemilineage:FLAa3", table = "info")
-flaa3_output <- flywire_partner_summary2(flaa3, partners = "o")
-```
-
-```{r}
-#difference plot
+#Plot showing difference of hemilineage sizes between MCNS and FW
+merged_df_all_info <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/1RvzMYSPB01eG1X_sI6Xrp48s4XgwdXjTrNoGCtR39BI/edit?gid=753368775#gid=753368775", sheet = "Fru_FW")
 PS.hemilineage <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/1btSxWVNQbGHO5pVb2xtnB6l9JY1t1qgQHzhfIJe_rXo/edit?gid=1474513720#gid=1474513720")
 fru_hemilineage <- PS.hemilineage %>% filter(seed_user == "IB" | seed_user == "IB (in progress)")
 

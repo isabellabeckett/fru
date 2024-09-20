@@ -1,0 +1,270 @@
+---
+title: "Summer analysis"
+author: "Bhumpanya Chaisrisawatsuk"
+date: "2024-07-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(googlesheets4)
+library(malecns)
+library(dplyr)
+library(nat.nblast)
+library(fafbseg)
+library(tidyverse)
+library(coconatfly)
+library(dendextend)
+```
+
+```{r}
+fru.url <-"https://docs.google.com/spreadsheets/d/1RvzMYSPB01eG1X_sI6Xrp48s4XgwdXjTrNoGCtR39BI/edit?gid=2055571018#gid=2055571018"
+summary = read_sheet(fru.url, sheet = "Summary")
+summary = summary %>% arrange(Observed)
+sheetnames <- summary$Clones
+```
+
+```{r}
+skels <- malecns::read_mcns_neurons(fru.sheets.adtf$bodyid)
+
+#plot3d(skels[1]/1e3, col = "black")
+#plot3d(dot[1])
+```
+
+```{r}
+mba <- mcns_body_annotations()
+```
+
+```{r}
+sideinfo <- mba %>% filter(bodyid %in% names(skels)) %>% select(bodyid, soma_side)
+leftside <- sideinfo %>% filter(soma_side == "L")
+rightside <- sideinfo %>% filter(soma_side == "R")
+mirror <- mirror_malecns(skels[names(skels) %in% rightside$bodyid])
+skels.left <- skels[names(skels) %in% leftside$bodyid]
+all.skels <- c(mirror, skels.left)
+```
+
+```{r}
+dot <- dotprops(all.skels/1e3, k=5, resample = 1)
+plot3d(dot)
+```
+
+```{r}
+aba <- nblast_allbyall(dot)
+aba.clust <- nhclust(scoremat = aba)
+```
+
+```{r}
+leaflabel <- labels(aba.clust)
+match.labels <- fru.sheets.adtf$label[match(leaflabel, fru.sheets.adtf$bodyid)]
+labels(aba.clust) <- match.labels
+```
+
+```{r}
+color_labels <- function(labels) {
+  sapply(labels, function(label) {
+    if (grepl("Y", label)) {
+      return("brown2")  # Color for labels containing "Y"
+    } else if (grepl("N", label)) {
+      return("darkgrey")   # Color for labels containing "N"
+    } else {
+      return("black") # Default color
+    }
+  })
+}
+```
+
+```{r}
+dend <- as.dendrogram(aba.clust) %>% 
+  set("labels_col", value = color_labels(labels(aba.clust))) %>%
+  set("branches_lwd", value =3) %>% 
+  set("labels_cex", value = 0.7) %>%
+  plot(lwd = 3)
+```
+
+```{r}
+#Cosine plot
+
+clone <- sheetnames[58]
+  fru.sheets <- googlesheets4::read_sheet(fru.url, sheet = clone)
+  fru.sheets <- fru.sheets %>% mutate(label = paste(bodyid, side, Fru, sep = "_"))
+  
+  pipb_ids <- fru.sheets$bodyid
+  
+  cosine.plot <- mcns_cosine_plot(pipb_ids, group = TRUE, heatmap = FALSE, interactive = FALSE, threshold = 5, labRow = "{type}_{soma_side}", metadata.source='clio')
+  
+  
+  #labelling the dendrogram
+  leaflabel <- labels(cosine.plot)
+  match.labels <- fru.sheets$label[match(leaflabel, fru.sheets$bodyid)]
+  labels(cosine.plot) <- match.labels
+  
+  #labelling Fru
+  color_labels <- function(labels) {
+  sapply(labels, function(label) {
+    if (grepl("Y", label)) {
+      return("brown2")  # Color for labels containing "Y"
+    } else if (grepl("N", label)) {
+      return("darkgrey")   # Color for labels containing "N"
+    } else {
+      return("black") # Default color
+    }
+  })
+  }
+  
+  #setting the width
+  a <- length(sideinfo$bodyid)
+  w = 2000 + 4*a
+  
+  #saving the plot
+  plot_name <- paste0("plot_", clone, ".png")
+  folder_path <- "~/Documents/Greg Jefferis' lab/cosine clones"
+  full_path <- file.path(folder_path, plot_name)
+  png(full_path, width = w, height = 600)
+  
+  
+  #plotting
+  dend <- as.dendrogram(cosine.plot) %>% 
+  set("labels_col", value = color_labels(labels(cosine.plot))) %>%
+  set("branches_lwd", value =3) %>% 
+  set("labels_cex", value = 0.7) %>%
+  plot(lwd = 3)
+```
+
+
+```{r}
+#NBLAST plot
+
+s <- length(sheetnames)
+setwd("~/Documents/Greg Jefferis' lab/NBLAST clones")
+for (i in 1:s)
+{
+  clone <- sheetnames[i]
+  fru.sheets <- googlesheets4::read_sheet(fru.url, sheet = clone)
+  fru.sheets <- fru.sheets %>% mutate(label = paste(bodyid, side, Fru, sep = "_"))
+  
+  #creating the skeleton
+  skels <- malecns::read_mcns_neurons(fru.sheets$bodyid)
+  
+  #mirroring
+  sideinfo <- mba %>% filter(bodyid %in% names(skels)) %>% select(bodyid, soma_side)
+  leftside <- sideinfo %>% filter(soma_side == "L")
+  rightside <- sideinfo %>% filter(soma_side == "R")
+  mid <- sideinfo %>% filter(soma_side == "M")
+  if (length(rightside$bodyid) > 0) {
+  mirror <- mirror_malecns(skels[names(skels) %in% rightside$bodyid])
+} else {
+  mirror <- c(0)
+}
+
+  skels.left <- skels[names(skels) %in% leftside$bodyid]
+if (length(rightside$bodyid) > 0) {
+  all.skels <- c(mirror, skels.left)
+} else {
+  all.skels <- skels
+}
+
+  #making the dendrogram
+  dot <- dotprops(all.skels/1e3, k=5, resample = 1)
+  aba <- nblast_allbyall(dot)
+  aba.clust <- nhclust(scoremat = aba)
+  
+  #labelling the dendrogram
+  leaflabel <- labels(aba.clust)
+  match.labels <- fru.sheets$label[match(leaflabel, fru.sheets$bodyid)]
+  labels(aba.clust) <- match.labels
+  
+  #labelling Fru
+  color_labels <- function(labels) {
+  sapply(labels, function(label) {
+    if (grepl("Y", label)) {
+      return("brown2")  # Color for labels containing "Y"
+    } else if (grepl("N", label)) {
+      return("darkgrey")   # Color for labels containing "N"
+    } else {
+      return("black") # Default color
+    }
+  })
+  }
+  
+  #setting the width
+  a <- length(sideinfo$bodyid)
+  w = 2000 + 4*a
+  
+  #saving the plot
+  plot_name <- paste0("plot_", clone, ".png")
+  folder_path <- "~/Documents/Greg Jefferis' lab/NBLAST clones"
+  full_path <- file.path(folder_path, plot_name)
+  png(full_path, width = w, height = 600)
+  
+  #plotting
+  dend <- as.dendrogram(aba.clust) %>% 
+  set("labels_col", value = color_labels(labels(aba.clust))) %>%
+  set("branches_lwd", value =3) %>% 
+  set("labels_cex", value = 0.7) %>%
+  plot(lwd = 3)
+}
+```
+
+```{r}
+#Specific clones
+
+found <- summary %>% filter(summary$`Found?` == "Y") %>% select(Clones)
+sheetnames <- found[[1]]
+sheetnames <- sheetnames[-c(1, 6, 32, 41)]
+sheetnames <- c(sheetnames, "aIP-g (Nam)")
+```
+
+```{r}
+s <- length(sheetnames)
+for (i in s)
+{
+  clone <- sheetnames[i]
+  fru.sheets <- googlesheets4::read_sheet(fru.url, sheet = clone)
+  fru.sheets <- fru.sheets %>% mutate(label = paste(bodyid, side, Fru, sep = "_"))
+  
+  pipb_ids <- fru.sheets$bodyid
+  
+  cosine.plot <- mcns_cosine_plot(pipb_ids, group = TRUE, heatmap = FALSE, interactive = FALSE, threshold = 5, labRow = "{type}_{soma_side}", metadata.source='clio')
+  
+  
+  #labelling the dendrogram
+  leaflabel <- labels(cosine.plot)
+  match.labels <- fru.sheets$label[match(leaflabel, fru.sheets$bodyid)]
+  labels(cosine.plot) <- match.labels
+  
+  #labelling Fru
+  color_labels <- function(labels) {
+  sapply(labels, function(label) {
+    if (grepl("Y", label)) {
+      return("brown2")  # Color for labels containing "Y"
+    } else if (grepl("N", label)) {
+      return("darkgrey")   # Color for labels containing "N"
+    } else {
+      return("black") # Default color
+    }
+  })
+  }
+  
+  #setting the width
+  a <- length(sideinfo$bodyid)
+  w = 2000 + 4*a
+  
+  #saving the plot
+  plot_name <- paste0("plot_", clone, ".png")
+  folder_path <- "~/Documents/Greg Jefferis' lab/cosine clones"
+  full_path <- file.path(folder_path, plot_name)
+  png(full_path, width = w, height = 600)
+  
+  
+  #plotting
+  dend <- as.dendrogram(cosine.plot) %>% 
+  set("labels_col", value = color_labels(labels(cosine.plot))) %>%
+  set("branches_lwd", value =3) %>% 
+  set("labels_cex", value = 0.7) %>%
+  plot(lwd = 3)
+}
+```
